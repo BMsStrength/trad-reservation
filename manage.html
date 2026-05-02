@@ -96,7 +96,26 @@
   </div>
 
   <script>
-    var API_BASE ='https://script.google.com/macros/s/AKfycbxzphUXhjAEwxFsj6napghnfRZh7R7p15L_iDfKwM9p56wdRrDsIbQrXzggFdqjgihY/exec';
+    var API_BASE = 'https://script.google.com/macros/s/AKfycbxzphUXhjAEwxFsj6napghnfRZh7R7p15L_iDfKwM9p56wdRrDsIbQrXzggFdqjgihY/exec';
+
+    // JSONP helpers
+    var _jid = 0;
+    function gasGet(params, cb) {
+      var n = '_gcb_' + (++_jid);
+      window[n] = function(d) { delete window[n]; document.getElementById(n).remove(); cb(null, d); };
+      var qs = Object.keys(params).map(function(k){ return encodeURIComponent(k)+'='+encodeURIComponent(params[k]); }).join('&');
+      var s = document.createElement('script'); s.id = n; s.src = API_BASE + '?' + qs + '&callback=' + n;
+      s.onerror = function() { delete window[n]; s.remove(); cb(new Error('接続エラー')); };
+      document.body.appendChild(s);
+    }
+    function gasPost(body, cb) {
+      var n = '_gcb_' + (++_jid);
+      window[n] = function(d) { delete window[n]; document.getElementById(n).remove(); cb(null, d); };
+      var s = document.createElement('script'); s.id = n;
+      s.src = API_BASE + '?payload=' + encodeURIComponent(JSON.stringify(body)) + '&callback=' + n;
+      s.onerror = function() { delete window[n]; s.remove(); cb(new Error('接続エラー')); };
+      document.body.appendChild(s);
+    }
 
     var token = new URLSearchParams(window.location.search).get('token');
 
@@ -108,20 +127,17 @@
     }
 
     function loadReservation() {
-      fetch(API_BASE + '?action=getReservation&token=' + token)
-        .then(function(r) { return r.json(); })
-        .then(function(data) {
-          if (data.error) {
-            document.getElementById('content').innerHTML =
-              '<div class="msg msg-error">' + data.error + '</div>';
-            return;
-          }
-          renderReservation(data.reservation);
-        })
-        .catch(function() {
-          document.getElementById('content').innerHTML =
-            '<div class="msg msg-error">接続エラーが発生しました。</div>';
-        });
+      gasGet({ action: 'getReservation', token: token }, function(err, data) {
+        if (err || !data) {
+          document.getElementById('content').innerHTML = '<div class="msg msg-error">接続エラーが発生しました。</div>';
+          return;
+        }
+        if (data.error) {
+          document.getElementById('content').innerHTML = '<div class="msg msg-error">' + data.error + '</div>';
+          return;
+        }
+        renderReservation(data.reservation);
+      });
     }
 
     function renderReservation(r) {
@@ -157,22 +173,13 @@
     function cancelReservation() {
       if (!confirm('この予約をキャンセルしますか？')) return;
 
-      fetch(API_BASE, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'cancelReservation', token: token })
-      })
-      .then(function(r) { return r.json(); })
-      .then(function(data) {
-        if (data.error) {
-          alert(data.error);
-          return;
-        }
+      gasPost({ action: 'cancelReservation', token: token }, function(err, data) {
+        if (err || !data) { alert('接続エラーが発生しました。'); return; }
+        if (data.error) { alert(data.error); return; }
         document.getElementById('content').innerHTML =
           '<div class="msg msg-success">予約をキャンセルしました。</div>' +
           '<p style="text-align:center;margin-top:12px;color:var(--gray-600);font-size:14px;">またのご利用をお待ちしております。</p>';
-      })
-      .catch(function() { alert('接続エラーが発生しました。'); });
+      });
     }
   </script>
 </body>

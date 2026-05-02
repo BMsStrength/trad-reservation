@@ -357,15 +357,21 @@
       showAdmin();
     }
 
+    // JSONP helpers
+    var _jid = 0;
+    function _jsonp(url, cb) {
+      var n = '_gcb_' + (++_jid);
+      window[n] = function(d) { delete window[n]; document.getElementById(n).remove(); cb(d); };
+      var s = document.createElement('script'); s.id = n; s.src = url + '&callback=' + n;
+      s.onerror = function() { delete window[n]; s.remove(); cb({error:'接続エラー'}); };
+      document.body.appendChild(s);
+    }
+
     function doLogin() {
       var pw = document.getElementById('loginPassword').value;
       if (!pw) return;
-      fetch(API_BASE, {
-        method:'POST', headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({action:'adminLogin', password:pw})
-      })
-      .then(function(r){return r.json();})
-      .then(function(data){
+      var payload = encodeURIComponent(JSON.stringify({action:'adminLogin', password:pw}));
+      _jsonp(API_BASE + '?payload=' + payload, function(data) {
         if (data.error) {
           document.getElementById('loginError').textContent = data.error;
           document.getElementById('loginError').style.display = 'block';
@@ -374,8 +380,7 @@
         adminToken = data.adminToken;
         localStorage.setItem('trad_admin_token', adminToken);
         showAdmin();
-      })
-      .catch(function(){ alert('接続エラー'); });
+      });
     }
 
     function doLogout() {
@@ -403,11 +408,18 @@
 
     function apiGet(action, extra) {
       var url = API_BASE + '?action=' + action + '&adminToken=' + adminToken + (extra||'');
-      return fetch(url).then(function(r){return r.json();});
+      return { then: function(handler) {
+        _jsonp(url, function(data) { handler(data); });
+        return { catch: function(){} };
+      }};
     }
     function apiPost(body) {
       body.adminToken = adminToken;
-      return fetch(API_BASE, {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}).then(function(r){return r.json();});
+      var payload = encodeURIComponent(JSON.stringify(body));
+      return { then: function(handler) {
+        _jsonp(API_BASE + '?payload=' + payload, function(data) { handler(data); });
+        return { catch: function(){} };
+      }};
     }
 
     // ===== DASHBOARD =====
