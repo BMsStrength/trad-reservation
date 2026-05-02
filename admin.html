@@ -1,0 +1,645 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>管理画面 | TRAD</title>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --brand-blue:#0B3D91; --brand-blue-light:#1565C0; --brand-blue-pale:#E3F2FD;
+      --brand-blue-dark:#062657; --white:#FFF; --gray-50:#FAFAFA; --gray-100:#F5F5F5;
+      --gray-200:#EEE; --gray-300:#E0E0E0; --gray-400:#BDBDBD; --gray-500:#9E9E9E;
+      --gray-600:#757575; --gray-700:#616161; --gray-800:#424242; --gray-900:#212121;
+      --success:#2E7D32; --danger:#C62828; --warning:#F57F17;
+      --radius:12px; --radius-sm:8px; --shadow:0 2px 8px rgba(0,0,0,0.08);
+    }
+    *{margin:0;padding:0;box-sizing:border-box;}
+    body{font-family:'Noto Sans JP',sans-serif;background:var(--gray-100);color:var(--gray-900);}
+
+    /* Nav */
+    .nav{background:var(--brand-blue-dark);color:var(--white);padding:12px 20px;display:flex;justify-content:space-between;align-items:center;position:sticky;top:0;z-index:100;}
+    .nav-brand{font-size:18px;font-weight:900;letter-spacing:3px;}
+    .nav-badge{font-size:10px;background:rgba(255,255,255,0.2);padding:2px 8px;border-radius:10px;margin-left:8px;}
+    .nav-logout{background:none;border:1px solid rgba(255,255,255,0.3);color:var(--white);padding:6px 12px;border-radius:var(--radius-sm);cursor:pointer;font-size:12px;}
+
+    /* Tabs */
+    .tabs{display:flex;background:var(--white);border-bottom:2px solid var(--gray-200);overflow-x:auto;-webkit-overflow-scrolling:touch;}
+    .tab{padding:12px 20px;font-size:13px;font-weight:600;color:var(--gray-500);cursor:pointer;border-bottom:3px solid transparent;white-space:nowrap;transition:all 0.2s;}
+    .tab.active{color:var(--brand-blue);border-bottom-color:var(--brand-blue);}
+    .tab:hover{color:var(--gray-800);}
+
+    /* Content */
+    .content{max-width:960px;margin:0 auto;padding:20px 16px;}
+    .panel{display:none;} .panel.active{display:block;}
+
+    /* Cards */
+    .card{background:var(--white);border-radius:var(--radius);padding:20px;box-shadow:var(--shadow);margin-bottom:16px;}
+    .card-title{font-size:15px;font-weight:700;margin-bottom:12px;display:flex;justify-content:space-between;align-items:center;}
+
+    /* Timeline */
+    .timeline-item{display:flex;align-items:flex-start;gap:12px;padding:12px 0;border-bottom:1px solid var(--gray-100);}
+    .timeline-item:last-child{border-bottom:none;}
+    .timeline-time{width:55px;font-size:14px;font-weight:700;color:var(--brand-blue);flex-shrink:0;padding-top:2px;}
+    .timeline-body{flex:1;}
+    .timeline-name{font-size:15px;font-weight:600;}
+    .timeline-menu{font-size:12px;color:var(--gray-600);margin-top:2px;}
+    .timeline-actions{display:flex;gap:6px;margin-top:6px;}
+    .timeline-empty{text-align:center;padding:32px;color:var(--gray-500);font-size:14px;}
+
+    /* Week summary */
+    .week-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:6px;}
+    .week-cell{text-align:center;padding:10px 4px;border-radius:var(--radius-sm);background:var(--gray-50);}
+    .week-day{font-size:11px;color:var(--gray-500);margin-bottom:4px;}
+    .week-date{font-size:13px;font-weight:600;}
+    .week-count{font-size:18px;font-weight:700;color:var(--brand-blue);margin-top:4px;}
+    .week-cell.today{background:var(--brand-blue-pale);}
+
+    /* Buttons */
+    .btn{padding:8px 16px;border:none;border-radius:var(--radius-sm);font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;transition:all 0.15s;}
+    .btn-sm{padding:4px 10px;font-size:11px;}
+    .btn-primary{background:var(--brand-blue);color:var(--white);} .btn-primary:hover{background:var(--brand-blue-dark);}
+    .btn-danger{background:var(--danger);color:var(--white);} .btn-danger:hover{background:#B71C1C;}
+    .btn-outline{background:var(--white);color:var(--gray-700);border:1px solid var(--gray-300);} .btn-outline:hover{background:var(--gray-50);}
+    .btn-success{background:var(--success);color:var(--white);}
+
+    /* Forms */
+    .form-row{display:flex;gap:12px;margin-bottom:12px;flex-wrap:wrap;}
+    .form-group{flex:1;min-width:150px;}
+    .form-label{display:block;font-size:12px;font-weight:600;color:var(--gray-600);margin-bottom:4px;}
+    .form-input,.form-select{width:100%;padding:10px 12px;border:1px solid var(--gray-300);border-radius:var(--radius-sm);font-size:14px;font-family:inherit;}
+    .form-input:focus,.form-select:focus{outline:none;border-color:var(--brand-blue);}
+
+    /* Table */
+    .table-wrap{overflow-x:auto;}
+    table{width:100%;border-collapse:collapse;font-size:13px;}
+    th{background:var(--gray-50);padding:10px 12px;text-align:left;font-weight:600;color:var(--gray-600);border-bottom:2px solid var(--gray-200);white-space:nowrap;}
+    td{padding:10px 12px;border-bottom:1px solid var(--gray-100);}
+    .badge{display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:700;}
+    .badge-confirmed{background:#E8F5E9;color:var(--success);}
+    .badge-cancelled{background:#FFEBEE;color:var(--danger);}
+    .badge-active{background:#E8F5E9;color:var(--success);}
+    .badge-inactive{background:var(--gray-200);color:var(--gray-600);}
+
+    /* Login */
+    .login-wrap{display:flex;align-items:center;justify-content:center;min-height:100vh;background:var(--brand-blue);}
+    .login-box{background:var(--white);border-radius:var(--radius);padding:40px 32px;width:100%;max-width:360px;margin:16px;text-align:center;box-shadow:0 8px 40px rgba(0,0,0,0.2);}
+    .login-brand{font-size:28px;font-weight:900;letter-spacing:4px;color:var(--brand-blue);margin-bottom:4px;}
+    .login-sub{font-size:11px;color:var(--gray-500);margin-bottom:32px;letter-spacing:1px;}
+    .login-input{width:100%;padding:14px 16px;border:2px solid var(--gray-200);border-radius:var(--radius-sm);font-size:16px;margin-bottom:16px;font-family:inherit;}
+    .login-input:focus{outline:none;border-color:var(--brand-blue);}
+    .login-btn{width:100%;padding:14px;background:var(--brand-blue);color:var(--white);border:none;border-radius:var(--radius-sm);font-size:16px;font-weight:700;cursor:pointer;font-family:inherit;}
+    .login-btn:hover{background:var(--brand-blue-dark);}
+    .login-error{color:var(--danger);font-size:13px;margin-bottom:12px;display:none;}
+
+    /* Modal */
+    .modal-overlay{display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);z-index:200;align-items:center;justify-content:center;}
+    .modal-overlay.show{display:flex;}
+    .modal{background:var(--white);border-radius:var(--radius);padding:24px;width:100%;max-width:480px;margin:16px;max-height:90vh;overflow-y:auto;}
+    .modal-title{font-size:18px;font-weight:700;margin-bottom:16px;}
+    .modal-footer{display:flex;gap:8px;justify-content:flex-end;margin-top:20px;}
+  </style>
+</head>
+<body>
+
+  <!-- Login Screen -->
+  <div id="loginScreen" class="login-wrap">
+    <div class="login-box">
+      <div class="login-brand">TRAD<span style="font-size:12px;vertical-align:super;">™</span></div>
+      <div class="login-sub">管理画面</div>
+      <div class="login-error" id="loginError"></div>
+      <input class="login-input" type="password" id="loginPassword" placeholder="パスワード" onkeydown="if(event.key==='Enter')doLogin()">
+      <button class="login-btn" onclick="doLogin()">ログイン</button>
+    </div>
+  </div>
+
+  <!-- Admin Dashboard (hidden until login) -->
+  <div id="adminApp" style="display:none;">
+    <div class="nav">
+      <div>
+        <span class="nav-brand">TRAD</span>
+        <span class="nav-badge">管理</span>
+      </div>
+      <button class="nav-logout" onclick="doLogout()">ログアウト</button>
+    </div>
+
+    <div class="tabs" id="tabs">
+      <div class="tab active" data-tab="dashboard" onclick="switchTab('dashboard')">ダッシュボード</div>
+      <div class="tab" data-tab="reservations" onclick="switchTab('reservations')">予約管理</div>
+      <div class="tab" data-tab="recurring" onclick="switchTab('recurring')">繰り返し</div>
+      <div class="tab" data-tab="closures" onclick="switchTab('closures')">休業管理</div>
+      <div class="tab" data-tab="customers" onclick="switchTab('customers')">顧客</div>
+    </div>
+
+    <div class="content">
+      <!-- Dashboard -->
+      <div class="panel active" id="panel-dashboard">
+        <div class="card">
+          <div class="card-title">今週の予約数</div>
+          <div class="week-grid" id="weekGrid"></div>
+        </div>
+        <div class="card">
+          <div class="card-title">
+            <span>今日の予約</span>
+            <button class="btn btn-primary btn-sm" onclick="openCreateModal()">+ 新規予約</button>
+          </div>
+          <div id="todayTimeline"></div>
+        </div>
+      </div>
+
+      <!-- Reservations -->
+      <div class="panel" id="panel-reservations">
+        <div class="card">
+          <div class="card-title">
+            <span>予約一覧</span>
+            <div style="display:flex;gap:8px;">
+              <input class="form-input" type="date" id="filterDate" style="width:160px;padding:6px 10px;font-size:13px;" onchange="loadReservations()">
+              <button class="btn btn-primary btn-sm" onclick="openCreateModal()">+ 新規</button>
+              <button class="btn btn-outline btn-sm" onclick="openBulkModal()">一括作成</button>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>日付</th><th>時間</th><th>お客様</th><th>メニュー</th><th>状態</th><th>操作</th></tr></thead>
+              <tbody id="resvTableBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- Recurring -->
+      <div class="panel" id="panel-recurring">
+        <div class="card">
+          <div class="card-title">
+            <span>繰り返し予約</span>
+            <button class="btn btn-primary btn-sm" onclick="openRecurringModal()">+ 新規登録</button>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>お客様</th><th>メニュー</th><th>曜日</th><th>時間</th><th>状態</th><th>操作</th></tr></thead>
+              <tbody id="recurringTableBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- Closures -->
+      <div class="panel" id="panel-closures">
+        <div class="card">
+          <div class="card-title">
+            <span>臨時休業</span>
+            <button class="btn btn-primary btn-sm" onclick="openClosureModal()">+ 追加</button>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>日付</th><th>種類</th><th>時間</th><th>理由</th><th>操作</th></tr></thead>
+              <tbody id="closureTableBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- Customers -->
+      <div class="panel" id="panel-customers">
+        <div class="card">
+          <div class="card-title">顧客一覧</div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>名前</th><th>メール</th><th>電話</th><th>登録日</th></tr></thead>
+              <tbody id="customerTableBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Create Reservation Modal -->
+  <div class="modal-overlay" id="createModal">
+    <div class="modal">
+      <div class="modal-title">新規予約（管理者）</div>
+      <div class="form-row">
+        <div class="form-group"><label class="form-label">お客様名</label><input class="form-input" id="mName"></div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label class="form-label">メール</label><input class="form-input" type="email" id="mEmail"></div>
+        <div class="form-group"><label class="form-label">電話</label><input class="form-input" type="tel" id="mPhone"></div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label class="form-label">メニュー</label>
+          <select class="form-select" id="mMenu">
+            <option value="パーソナルトレーニング">パーソナルトレーニング（60分）</option>
+            <option value="ペアトレーニング">ペアトレーニング（60分）</option>
+            <option value="メンテナンス">メンテナンス（30分）</option>
+            <option value="無料体験">無料体験（90分）</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label class="form-label">日付</label><input class="form-input" type="date" id="mDate"></div>
+        <div class="form-group"><label class="form-label">開始時刻</label><input class="form-input" type="time" id="mTime" step="600"></div>
+      </div>
+      <label style="font-size:12px;color:var(--gray-600);"><input type="checkbox" id="mSkipNotify"> メール通知を送らない</label>
+      <div class="modal-footer">
+        <button class="btn btn-outline" onclick="closeModal('createModal')">キャンセル</button>
+        <button class="btn btn-primary" onclick="submitCreate()">予約を作成</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Bulk Create Modal -->
+  <div class="modal-overlay" id="bulkModal">
+    <div class="modal">
+      <div class="modal-title">一括予約作成</div>
+      <div class="form-row">
+        <div class="form-group"><label class="form-label">お客様名</label><input class="form-input" id="bName"></div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label class="form-label">メール</label><input class="form-input" type="email" id="bEmail"></div>
+        <div class="form-group"><label class="form-label">電話</label><input class="form-input" type="tel" id="bPhone"></div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label class="form-label">メニュー</label>
+          <select class="form-select" id="bMenu">
+            <option value="パーソナルトレーニング">パーソナルトレーニング（60分）</option>
+            <option value="ペアトレーニング">ペアトレーニング（60分）</option>
+            <option value="メンテナンス">メンテナンス（30分）</option>
+            <option value="無料体験">無料体験（90分）</option>
+          </select>
+        </div>
+      </div>
+      <div id="bulkDateList">
+        <div class="form-row bulk-row">
+          <div class="form-group"><label class="form-label">日付</label><input class="form-input" type="date" name="bulkDate"></div>
+          <div class="form-group"><label class="form-label">開始時刻</label><input class="form-input" type="time" name="bulkTime" step="600"></div>
+        </div>
+      </div>
+      <button class="btn btn-outline btn-sm" onclick="addBulkRow()" style="margin-bottom:12px;">+ 日時を追加</button>
+      <label style="font-size:12px;color:var(--gray-600);display:block;margin-bottom:8px;"><input type="checkbox" id="bSkipNotify" checked> メール通知を送らない</label>
+      <div class="modal-footer">
+        <button class="btn btn-outline" onclick="closeModal('bulkModal')">キャンセル</button>
+        <button class="btn btn-primary" onclick="submitBulk()">一括作成</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Recurring Modal -->
+  <div class="modal-overlay" id="recurringModal">
+    <div class="modal">
+      <div class="modal-title">繰り返し予約を登録</div>
+      <p style="font-size:12px;color:var(--gray-600);margin-bottom:16px;">登録すると1ヶ月先まで自動で予約が入り、毎日自動延長されます。</p>
+      <div class="form-row">
+        <div class="form-group"><label class="form-label">お客様名</label><input class="form-input" id="rName"></div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label class="form-label">メール</label><input class="form-input" type="email" id="rEmail"></div>
+        <div class="form-group"><label class="form-label">電話</label><input class="form-input" type="tel" id="rPhone"></div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label class="form-label">メニュー</label>
+          <select class="form-select" id="rMenu">
+            <option value="パーソナルトレーニング">パーソナルトレーニング（60分）</option>
+            <option value="ペアトレーニング">ペアトレーニング（60分）</option>
+            <option value="メンテナンス">メンテナンス（30分）</option>
+            <option value="無料体験">無料体験（90分）</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label class="form-label">曜日</label>
+          <select class="form-select" id="rDay">
+            <option value="0">日曜日</option><option value="1">月曜日</option>
+            <option value="3">水曜日</option><option value="4">木曜日</option>
+            <option value="5">金曜日</option><option value="6">土曜日</option>
+          </select>
+        </div>
+        <div class="form-group"><label class="form-label">開始時刻</label><input class="form-input" type="time" id="rTime" step="600"></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-outline" onclick="closeModal('recurringModal')">キャンセル</button>
+        <button class="btn btn-primary" onclick="submitRecurring()">登録して予約を生成</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Closure Modal -->
+  <div class="modal-overlay" id="closureModal">
+    <div class="modal">
+      <div class="modal-title">臨時休業を追加</div>
+      <div class="form-row">
+        <div class="form-group"><label class="form-label">日付</label><input class="form-input" type="date" id="cDate"></div>
+        <div class="form-group"><label class="form-label">種類</label>
+          <select class="form-select" id="cType" onchange="toggleClosureTime()">
+            <option value="full_day">終日</option>
+            <option value="time_range">時間指定</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-row" id="closureTimeRow" style="display:none;">
+        <div class="form-group"><label class="form-label">開始</label><input class="form-input" type="time" id="cStart"></div>
+        <div class="form-group"><label class="form-label">終了</label><input class="form-input" type="time" id="cEnd"></div>
+      </div>
+      <div class="form-group"><label class="form-label">理由（任意）</label><input class="form-input" id="cReason"></div>
+      <div class="modal-footer">
+        <button class="btn btn-outline" onclick="closeModal('closureModal')">キャンセル</button>
+        <button class="btn btn-primary" onclick="submitClosure()">追加</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    var API_BASE = https://script.google.com/macros/s/AKfycbxzphUXhjAEwxFsj6napghnfRZh7R7p15L_iDfKwM9p56wdRrDsIbQrXzggFdqjgihY/exec;
+    var adminToken = localStorage.getItem('trad_admin_token') || '';
+    var dayNames = ['日','月','火','水','木','金','土'];
+
+    // Check saved token
+    if (adminToken) {
+      showAdmin();
+    }
+
+    function doLogin() {
+      var pw = document.getElementById('loginPassword').value;
+      if (!pw) return;
+      fetch(API_BASE, {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({action:'adminLogin', password:pw})
+      })
+      .then(function(r){return r.json();})
+      .then(function(data){
+        if (data.error) {
+          document.getElementById('loginError').textContent = data.error;
+          document.getElementById('loginError').style.display = 'block';
+          return;
+        }
+        adminToken = data.adminToken;
+        localStorage.setItem('trad_admin_token', adminToken);
+        showAdmin();
+      })
+      .catch(function(){ alert('接続エラー'); });
+    }
+
+    function doLogout() {
+      adminToken = '';
+      localStorage.removeItem('trad_admin_token');
+      document.getElementById('adminApp').style.display='none';
+      document.getElementById('loginScreen').style.display='flex';
+    }
+
+    function showAdmin() {
+      document.getElementById('loginScreen').style.display='none';
+      document.getElementById('adminApp').style.display='block';
+      loadDashboard();
+    }
+
+    function switchTab(tab) {
+      document.querySelectorAll('.tab').forEach(function(t){t.classList.toggle('active', t.dataset.tab===tab);});
+      document.querySelectorAll('.panel').forEach(function(p){p.classList.toggle('active', p.id==='panel-'+tab);});
+      if (tab==='dashboard') loadDashboard();
+      if (tab==='reservations') loadReservations();
+      if (tab==='recurring') loadRecurring();
+      if (tab==='closures') loadClosures();
+      if (tab==='customers') loadCustomers();
+    }
+
+    function apiGet(action, extra) {
+      var url = API_BASE + '?action=' + action + '&adminToken=' + adminToken + (extra||'');
+      return fetch(url).then(function(r){return r.json();});
+    }
+    function apiPost(body) {
+      body.adminToken = adminToken;
+      return fetch(API_BASE, {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}).then(function(r){return r.json();});
+    }
+
+    // ===== DASHBOARD =====
+    function loadDashboard() {
+      apiGet('adminGetDashboard').then(function(data) {
+        if (data.error) { if(data.code===401) doLogout(); return; }
+        // Week grid
+        var wg = document.getElementById('weekGrid');
+        wg.innerHTML = '';
+        (data.week_summary||[]).forEach(function(d,i){
+          var div = document.createElement('div');
+          div.className = 'week-cell' + (i===0?' today':'');
+          div.innerHTML = '<div class="week-day">' + dayNames[d.day_of_week] + '</div>' +
+            '<div class="week-date">' + d.date.slice(5) + '</div>' +
+            '<div class="week-count">' + d.count + '</div>';
+          wg.appendChild(div);
+        });
+        // Today timeline
+        var tl = document.getElementById('todayTimeline');
+        var reservations = data.today_reservations || [];
+        if (reservations.length === 0) {
+          tl.innerHTML = '<div class="timeline-empty">今日の予約はありません</div>';
+          return;
+        }
+        var html = '';
+        reservations.forEach(function(r){
+          html += '<div class="timeline-item">' +
+            '<div class="timeline-time">' + r.start_time + '</div>' +
+            '<div class="timeline-body">' +
+              '<div class="timeline-name">' + r.customer_name + '</div>' +
+              '<div class="timeline-menu">' + r.menu + '（' + r.duration_min + '分） 〜' + r.end_time + '</div>' +
+              '<div class="timeline-actions">' +
+                '<button class="btn btn-danger btn-sm" onclick="cancelResv(\'' + r.id + '\')">キャンセル</button>' +
+              '</div>' +
+            '</div>' +
+          '</div>';
+        });
+        tl.innerHTML = html;
+      });
+    }
+
+    // ===== RESERVATIONS =====
+    function loadReservations() {
+      var dateFilter = document.getElementById('filterDate').value;
+      var extra = dateFilter ? '&date=' + dateFilter : '';
+      apiGet('adminGetReservations', extra).then(function(data){
+        if(data.error) return;
+        var tbody = document.getElementById('resvTableBody');
+        var rows = (data.reservations||[]);
+        if (rows.length===0) { tbody.innerHTML='<tr><td colspan="6" style="text-align:center;color:var(--gray-500);">予約がありません</td></tr>'; return; }
+        var html = '';
+        rows.forEach(function(r){
+          var badge = r.status==='confirmed' ? '<span class="badge badge-confirmed">確定</span>' : '<span class="badge badge-cancelled">取消</span>';
+          var actions = r.status==='confirmed' ?
+            '<button class="btn btn-danger btn-sm" onclick="cancelResv(\'' + r.id + '\')">取消</button>' : '';
+          html += '<tr><td>' + r.date + '</td><td>' + r.start_time + '〜' + r.end_time + '</td>' +
+            '<td>' + r.customer_name + '</td><td>' + r.menu + '</td><td>' + badge + '</td><td>' + actions + '</td></tr>';
+        });
+        tbody.innerHTML = html;
+      });
+    }
+
+    function cancelResv(id) {
+      if (!confirm('この予約をキャンセルしますか？')) return;
+      apiPost({action:'adminCancelReservation', id:id}).then(function(data){
+        if(data.error) { alert(data.error); return; }
+        loadDashboard(); loadReservations();
+      });
+    }
+
+    // ===== MODALS =====
+    function openCreateModal(){document.getElementById('createModal').classList.add('show');}
+    function openBulkModal(){document.getElementById('bulkModal').classList.add('show');}
+    function openRecurringModal(){document.getElementById('recurringModal').classList.add('show');}
+    function openClosureModal(){document.getElementById('closureModal').classList.add('show');}
+    function closeModal(id){document.getElementById(id).classList.remove('show');}
+
+    function submitCreate() {
+      var body = {
+        action:'adminCreateReservation',
+        customer_name: document.getElementById('mName').value,
+        customer_email: document.getElementById('mEmail').value,
+        customer_phone: document.getElementById('mPhone').value,
+        menu: document.getElementById('mMenu').value,
+        date: document.getElementById('mDate').value,
+        start_time: document.getElementById('mTime').value,
+        skip_notify: document.getElementById('mSkipNotify').checked
+      };
+      apiPost(body).then(function(data){
+        if(data.error){alert(data.error);return;}
+        closeModal('createModal');
+        loadDashboard(); loadReservations();
+      });
+    }
+
+    function addBulkRow() {
+      var div = document.createElement('div');
+      div.className = 'form-row bulk-row';
+      div.innerHTML = '<div class="form-group"><label class="form-label">日付</label><input class="form-input" type="date" name="bulkDate"></div>' +
+        '<div class="form-group"><label class="form-label">開始時刻</label><input class="form-input" type="time" name="bulkTime" step="600"></div>';
+      document.getElementById('bulkDateList').appendChild(div);
+    }
+
+    function submitBulk() {
+      var dates = document.querySelectorAll('input[name="bulkDate"]');
+      var times = document.querySelectorAll('input[name="bulkTime"]');
+      var reservations = [];
+      for (var i = 0; i < dates.length; i++) {
+        if (dates[i].value && times[i].value) {
+          reservations.push({
+            customer_name: document.getElementById('bName').value,
+            customer_email: document.getElementById('bEmail').value,
+            customer_phone: document.getElementById('bPhone').value,
+            menu: document.getElementById('bMenu').value,
+            date: dates[i].value,
+            start_time: times[i].value
+          });
+        }
+      }
+      if (reservations.length===0) { alert('日時を入力してください。'); return; }
+      apiPost({action:'adminBulkCreate', reservations:reservations, skip_notify:document.getElementById('bSkipNotify').checked}).then(function(data){
+        if(data.error){alert(data.error);return;}
+        closeModal('bulkModal');
+        alert(reservations.length + '件の予約を作成しました。');
+        loadDashboard(); loadReservations();
+      });
+    }
+
+    // ===== RECURRING =====
+    function loadRecurring() {
+      apiGet('adminGetRecurring').then(function(data){
+        if(data.error) return;
+        var tbody = document.getElementById('recurringTableBody');
+        var rows = data.recurring||[];
+        if(rows.length===0){tbody.innerHTML='<tr><td colspan="6" style="text-align:center;color:var(--gray-500);">繰り返し予約はありません</td></tr>';return;}
+        var html='';
+        rows.forEach(function(r){
+          var badge = r.active ? '<span class="badge badge-active">有効</span>' : '<span class="badge badge-inactive">停止</span>';
+          var actions = r.active ? '<button class="btn btn-danger btn-sm" onclick="stopRecurring(\'' + r.series_id + '\')">停止</button>' : '';
+          html += '<tr><td>' + r.customer_name + '</td><td>' + r.menu + '</td><td>' + dayNames[r.day_of_week] + '</td>' +
+            '<td>' + r.start_time + '</td><td>' + badge + '</td><td>' + actions + '</td></tr>';
+        });
+        tbody.innerHTML=html;
+      });
+    }
+
+    function submitRecurring() {
+      var body = {
+        action:'adminCreateRecurring',
+        customer_name: document.getElementById('rName').value,
+        customer_email: document.getElementById('rEmail').value,
+        customer_phone: document.getElementById('rPhone').value,
+        menu: document.getElementById('rMenu').value,
+        day_of_week: parseInt(document.getElementById('rDay').value),
+        start_time: document.getElementById('rTime').value
+      };
+      apiPost(body).then(function(data){
+        if(data.error){alert(data.error);return;}
+        closeModal('recurringModal');
+        alert('繰り返し予約を登録し、' + data.generated + '件の予約を自動生成しました。');
+        loadRecurring();
+      });
+    }
+
+    function stopRecurring(seriesId) {
+      if(!confirm('この繰り返し予約を停止しますか？\n既に生成された予約はそのまま残ります。'))return;
+      apiPost({action:'adminStopRecurring', series_id:seriesId}).then(function(data){
+        if(data.error){alert(data.error);return;}
+        loadRecurring();
+      });
+    }
+
+    // ===== CLOSURES =====
+    function loadClosures() {
+      apiGet('adminGetClosures').then(function(data){
+        if(data.error) return;
+        var tbody = document.getElementById('closureTableBody');
+        var rows = data.closures||[];
+        if(rows.length===0){tbody.innerHTML='<tr><td colspan="5" style="text-align:center;color:var(--gray-500);">臨時休業はありません</td></tr>';return;}
+        var html='';
+        rows.forEach(function(c){
+          var typeText = c.type==='full_day' ? '終日' : '時間指定';
+          var timeText = c.type==='time_range' ? c.start_time + '〜' + c.end_time : '-';
+          html += '<tr><td>' + c.date + '</td><td>' + typeText + '</td><td>' + timeText + '</td><td>' + (c.reason||'-') + '</td>' +
+            '<td><button class="btn btn-danger btn-sm" onclick="deleteClosure(\'' + c.id + '\')">削除</button></td></tr>';
+        });
+        tbody.innerHTML=html;
+      });
+    }
+
+    function toggleClosureTime(){
+      document.getElementById('closureTimeRow').style.display=document.getElementById('cType').value==='time_range'?'flex':'none';
+    }
+
+    function submitClosure() {
+      var body = {
+        action:'adminCreateClosure',
+        date: document.getElementById('cDate').value,
+        type: document.getElementById('cType').value,
+        start_time: document.getElementById('cStart').value,
+        end_time: document.getElementById('cEnd').value,
+        reason: document.getElementById('cReason').value
+      };
+      apiPost(body).then(function(data){
+        if(data.error){alert(data.error);return;}
+        closeModal('closureModal');
+        loadClosures();
+      });
+    }
+
+    function deleteClosure(id) {
+      if(!confirm('この休業設定を削除しますか？'))return;
+      apiPost({action:'adminDeleteClosure', id:id}).then(function(data){
+        if(data.error){alert(data.error);return;}
+        loadClosures();
+      });
+    }
+
+    // ===== CUSTOMERS =====
+    function loadCustomers() {
+      apiGet('adminGetCustomers').then(function(data){
+        if(data.error) return;
+        var tbody = document.getElementById('customerTableBody');
+        var rows = data.customers||[];
+        if(rows.length===0){tbody.innerHTML='<tr><td colspan="4" style="text-align:center;color:var(--gray-500);">顧客がいません</td></tr>';return;}
+        var html='';
+        rows.forEach(function(c){
+          html += '<tr><td>' + c.name + '</td><td>' + (c.email||'-') + '</td><td>' + (c.phone||'-') + '</td><td>' + (c.created_at||'-').slice(0,10) + '</td></tr>';
+        });
+        tbody.innerHTML=html;
+      });
+    }
+  </script>
+</body>
+</html>

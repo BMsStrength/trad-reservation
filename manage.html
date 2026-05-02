@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>予約確認 | TRAD パーソナルコンディショニングジム</title>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --brand-blue: #0B3D91;
+      --brand-blue-light: #1565C0;
+      --brand-blue-pale: #E3F2FD;
+      --white: #FFFFFF;
+      --gray-50: #FAFAFA;
+      --gray-100: #F5F5F5;
+      --gray-200: #EEEEEE;
+      --gray-300: #E0E0E0;
+      --gray-500: #9E9E9E;
+      --gray-600: #757575;
+      --gray-700: #616161;
+      --gray-900: #212121;
+      --success: #2E7D32;
+      --danger: #C62828;
+      --radius: 12px;
+      --radius-sm: 8px;
+      --shadow: 0 2px 8px rgba(0,0,0,0.08);
+    }
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body {
+      font-family: 'Noto Sans JP', sans-serif;
+      background: var(--gray-50);
+      color: var(--gray-900);
+      min-height: 100vh;
+    }
+    .header {
+      background: var(--brand-blue);
+      color: var(--white);
+      padding: 16px 20px;
+      text-align: center;
+    }
+    .header-brand { font-size:24px; font-weight:900; letter-spacing:4px; }
+    .container { max-width:480px; margin:0 auto; padding:24px 16px; }
+
+    .card {
+      background: var(--white);
+      border-radius: var(--radius);
+      padding: 24px;
+      box-shadow: var(--shadow);
+      margin-bottom: 16px;
+    }
+    .card-title { font-size:16px; font-weight:700; margin-bottom:16px; }
+    .info-row { display:flex; padding:10px 0; border-bottom:1px solid var(--gray-100); }
+    .info-row:last-child { border-bottom:none; }
+    .info-label { width:90px; font-size:13px; color:var(--gray-600); flex-shrink:0; }
+    .info-value { font-size:15px; font-weight:500; }
+
+    .status-badge {
+      display:inline-block; padding:4px 12px; border-radius:20px; font-size:12px; font-weight:700;
+    }
+    .status-confirmed { background:#E8F5E9; color:var(--success); }
+    .status-cancelled { background:#FFEBEE; color:var(--danger); }
+
+    .btn {
+      width:100%; padding:14px; border:none; border-radius:var(--radius-sm);
+      font-size:15px; font-weight:700; font-family:inherit; cursor:pointer; margin-bottom:8px;
+    }
+    .btn-danger { background:var(--danger); color:var(--white); }
+    .btn-danger:hover { background:#B71C1C; }
+    .btn-outline { background:var(--white); color:var(--gray-700); border:2px solid var(--gray-300); }
+    .btn-outline:hover { background:var(--gray-50); }
+
+    .msg { padding:16px; border-radius:var(--radius-sm); font-size:14px; margin-bottom:16px; text-align:center; }
+    .msg-error { background:#FFEBEE; color:var(--danger); }
+    .msg-success { background:#E8F5E9; color:var(--success); }
+    .msg-info { background:var(--brand-blue-pale); color:var(--brand-blue); }
+
+    .loading { text-align:center; padding:60px 20px; color:var(--gray-500); }
+    .spinner { width:32px; height:32px; border:3px solid var(--gray-200); border-top-color:var(--brand-blue); border-radius:50%; animation:spin 0.8s linear infinite; margin:0 auto 12px; }
+    @keyframes spin { to { transform:rotate(360deg); } }
+
+    .recurring-note { background:#FFF3E0; color:#E65100; padding:12px 16px; border-radius:var(--radius-sm); font-size:13px; margin-bottom:16px; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div class="header-brand">TRAD<span style="font-size:10px;vertical-align:super;">™</span></div>
+  </div>
+
+  <div class="container">
+    <div id="content">
+      <div class="loading">
+        <div class="spinner"></div>
+        予約情報を読み込んでいます...
+      </div>
+    </div>
+  </div>
+
+  <script>
+    var API_BASE = https://script.google.com/macros/s/AKfycbxzphUXhjAEwxFsj6napghnfRZh7R7p15L_iDfKwM9p56wdRrDsIbQrXzggFdqjgihY/exec;
+
+    var token = new URLSearchParams(window.location.search).get('token');
+
+    if (!token) {
+      document.getElementById('content').innerHTML =
+        '<div class="msg msg-error">予約トークンが見つかりません。確認メールのリンクからアクセスしてください。</div>';
+    } else {
+      loadReservation();
+    }
+
+    function loadReservation() {
+      fetch(API_BASE + '?action=getReservation&token=' + token)
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+          if (data.error) {
+            document.getElementById('content').innerHTML =
+              '<div class="msg msg-error">' + data.error + '</div>';
+            return;
+          }
+          renderReservation(data.reservation);
+        })
+        .catch(function() {
+          document.getElementById('content').innerHTML =
+            '<div class="msg msg-error">接続エラーが発生しました。</div>';
+        });
+    }
+
+    function renderReservation(r) {
+      var dateObj = new Date(r.date + 'T00:00:00');
+      var dayNames = ['日','月','火','水','木','金','土'];
+      var dateStr = dateObj.getFullYear() + '年' + (dateObj.getMonth()+1) + '月' +
+        dateObj.getDate() + '日（' + dayNames[dateObj.getDay()] + '）';
+
+      var statusClass = r.status === 'confirmed' ? 'status-confirmed' : 'status-cancelled';
+      var statusText = r.status === 'confirmed' ? '確定' : 'キャンセル済み';
+
+      var html = '<div class="card">' +
+        '<div class="card-title">ご予約内容 <span class="status-badge ' + statusClass + '">' + statusText + '</span></div>' +
+        '<div class="info-row"><div class="info-label">お名前</div><div class="info-value">' + r.customer_name + '</div></div>' +
+        '<div class="info-row"><div class="info-label">メニュー</div><div class="info-value">' + r.menu + '（' + r.duration_min + '分）</div></div>' +
+        '<div class="info-row"><div class="info-label">日時</div><div class="info-value">' + dateStr + ' ' + r.start_time + '〜' + r.end_time + '</div></div>' +
+        '</div>';
+
+      if (r.is_recurring) {
+        html += '<div class="recurring-note">この予約は繰り返し予約です。変更・キャンセルはジムに直接ご連絡ください。</div>';
+      } else if (r.can_modify && r.status === 'confirmed') {
+        html += '<div style="margin-top:16px;">' +
+          '<button class="btn btn-danger" onclick="cancelReservation()">この予約をキャンセル</button>' +
+          '</div>' +
+          '<p style="font-size:12px;color:var(--gray-500);text-align:center;margin-top:8px;">前日23:59まで変更・キャンセルが可能です。</p>';
+      } else if (r.status === 'confirmed') {
+        html += '<div class="msg msg-info">変更・キャンセル期限（前日23:59）を過ぎています。直接ご連絡ください。</div>';
+      }
+
+      document.getElementById('content').innerHTML = html;
+    }
+
+    function cancelReservation() {
+      if (!confirm('この予約をキャンセルしますか？')) return;
+
+      fetch(API_BASE, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'cancelReservation', token: token })
+      })
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        if (data.error) {
+          alert(data.error);
+          return;
+        }
+        document.getElementById('content').innerHTML =
+          '<div class="msg msg-success">予約をキャンセルしました。</div>' +
+          '<p style="text-align:center;margin-top:12px;color:var(--gray-600);font-size:14px;">またのご利用をお待ちしております。</p>';
+      })
+      .catch(function() { alert('接続エラーが発生しました。'); });
+    }
+  </script>
+</body>
+</html>
