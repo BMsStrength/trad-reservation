@@ -662,6 +662,47 @@
     // ===== CONFIG =====
     // ★ デプロイ後にGASのWebアプリURLに書き換える
     var API_BASE = 'https://script.google.com/macros/s/AKfycbxzphUXhjAEwxFsj6napghnfRZh7R7p15L_iDfKwM9p56wdRrDsIbQrXzggFdqjgihY/exec';
+    function apiGet(action, params) {
+  params = params || {};
+  params.action = action;
+
+  return new Promise(function(resolve, reject) {
+    var callbackName = 'jsonp_cb_' + Date.now() + '_' + Math.floor(Math.random() * 100000);
+
+    params.callback = callbackName;
+
+    var query = Object.keys(params).map(function(key) {
+      return encodeURIComponent(key) + '=' + encodeURIComponent(params[key]);
+    }).join('&');
+
+    var script = document.createElement('script');
+    var timer = setTimeout(function() {
+      cleanup();
+      reject(new Error('timeout'));
+    }, 15000);
+
+    function cleanup() {
+      clearTimeout(timer);
+      delete window[callbackName];
+      if (script.parentNode) {
+        script.parentNode.removeChild(script);
+      }
+    }
+
+    window[callbackName] = function(data) {
+      cleanup();
+      resolve(data);
+    };
+
+    script.onerror = function() {
+      cleanup();
+      reject(new Error('jsonp error'));
+    };
+
+    script.src = API_BASE + '?' + query;
+    document.body.appendChild(script);
+  });
+}
 
     // ===== JSONP通信ヘルパー（GAS CORS回避） =====
     var _jsonpId = 0;
@@ -738,19 +779,29 @@
     });
 
     function loadSettings() {
-      showLoading('設定を読み込み中...');
-      gasGet({ action: 'getSettings' }, function(err, data) {
-        hideLoading();
-        if (err || !data) { showError('接続エラーが発生しました。しばらくしてから再度お試しください。'); return; }
-        if (data.error) { showError(data.error); return; }
-        state.menus = data.menus || [];
-        state.closedDay = data.closed_day;
-        state.bufferMin = data.buffer_min;
-        state.dailyMax = data.daily_max_reservations;
-        state.bookableUntil = data.bookable_until ? new Date(data.bookable_until + 'T23:59:59') : null;
-        renderMenus();
-      });
-    }
+  showLoading('設定を読み込み中...');
+
+  apiGet('getSettings')
+    .then(function(data) {
+      hideLoading();
+
+      if (data.error) {
+        showError(data.error);
+        return;
+      }
+
+      state.menus = data.menus || [];
+      state.closedDay = data.closed_day;
+      state.bufferMin = data.buffer_min;
+      state.dailyMax = data.daily_max_reservations;
+
+      renderMenus();
+    })
+    .catch(function(err) {
+      hideLoading();
+      showError('接続エラーが発生しました。しばらくしてから再度お試しください。');
+    });
+}
 
     // ===== MENU RENDERING =====
     function renderMenus() {
@@ -919,51 +970,79 @@
     }
 
     function loadClosures() {
-      var year = state.currentMonth.getFullYear();
-      var month = ('0' + (state.currentMonth.getMonth() + 1)).slice(-2);
-      gasGet({ action: 'getClosures', month: year + '-' + month }, function(err, data) {
-        if (err || !data) return;
-        if (data.success && data.closures) {
-          state.closures = {};
-          data.closures.forEach(function(c) { state.closures[c.date] = c; });
-          renderCalendar();
-        }
-      });
-    }
+  var year = state.currentMonth.getFullYear();
+  var month = ('0' + (state.currentMonth.getMonth() + 1)).slice(-2);
+  var monthStr = year + '-' + month;
+
+  apiGet('getClosures', { month: monthStr })
+    .then(function(data) {
+      if (data.success && data.closures) {
+        state.closures = {};
+        data.closures.forEach(function(c) {
+          state.closures[c.date] = c;
+        });
+        renderCalendar();
+      }
+    })
+    .catch(function() {
+      // 臨時休業の取得失敗は無視
+    });
+}
 
     // ===== SLOTS =====
     function loadSlots(dateStr) {
-      var container = document.getElementById('slotsContainer');
-      container.style.display = 'block';
+  var container = document.getElementById('slotsContainer');
+  container.style.display = 'block';
 
-      var dateObj = new Date(dateStr + 'T00:00:00');
-      var dayNames = ['日','月','火','水','木','金','土'];
-      document.getElementById('slotsLabel').textContent =
-        (dateObj.getMonth()+1) + '/' + dateObj.getDate() + '（' + dayNames[dateObj.getDay()] + '）の空き状況';
+  var dateObj = new Date(dateStr + 'T00:00:00');
+  var dayNames = ['日','月','火','水','木','金','土'];
 
-      var content = document.getElementById('slotsContent');
-      content.innerHTML = '<div class="slots-loading"><div class="spinner" style="margin:0 auto;"></div><div style="margin-top:12px;">空き状況を確認中...</div></div>';
+  document.getElementById('slotsLabel').textContent =
+    (dateObj.getMonth()+1) + '/' + dateObj.getDate() + '（' + dayNames[dateObj.getDay()] + '）の空き状況';
 
-      gasGet({ action: 'getSlots', date: dateStr, menu: state.selectedMenu }, function(err, data) {
-        if (err || !data) { content.innerHTML = '<div class="slots-empty">接続エラーが発生しました。</div>'; return; }
-        if (data.error) { content.innerHTML = '<div class="slots-empty">' + data.error + '</div>'; return; }
-        if (data.closed) { content.innerHTML = '<div class="slots-empty">' + (data.reason || 'この日は予約を受け付けておりません。') + '</div>'; return; }
-        if (!data.slots || data.slots.length === 0) { content.innerHTML = '<div class="slots-empty">空き枠がありません。</div>'; return; }
+  var content = document.getElementById('slotsContent');
+  content.innerHTML = '<div class="slots-loading"><div class="spinner" style="margin:0 auto;"></div><div style="margin-top:12px;">空き状況を確認中...</div></div>';
 
-        var html = '<div class="slots-grid">';
-        data.slots.forEach(function(slot) {
-          var cls = slot.available ? 'slot available' : 'slot unavailable';
-          var icon = slot.available ? '◯' : '✕';
-          var onclick = slot.available ? ' onclick="selectSlot(\'' + slot.time + '\')"' : '';
-          html += '<div class="' + cls + '" data-time="' + slot.time + '"' + onclick + '>' +
-            '<div class="slot-time">' + slot.time + '</div>' +
-            '<div class="slot-icon">' + icon + '</div>' +
-          '</div>';
-        });
-        html += '</div>';
-        content.innerHTML = html;
+  apiGet('getSlots', {
+    date: dateStr,
+    menu: state.selectedMenu
+  })
+    .then(function(data) {
+      if (data.error) {
+        content.innerHTML = '<div class="slots-empty">' + data.error + '</div>';
+        return;
+      }
+
+      if (data.closed) {
+        content.innerHTML = '<div class="slots-empty">' + (data.reason || 'この日は予約を受け付けておりません。') + '</div>';
+        return;
+      }
+
+      if (!data.slots || data.slots.length === 0) {
+        content.innerHTML = '<div class="slots-empty">空き枠がありません。</div>';
+        return;
+      }
+
+      var html = '<div class="slots-grid">';
+
+      data.slots.forEach(function(slot) {
+        var cls = slot.available ? 'slot available' : 'slot unavailable';
+        var icon = slot.available ? '◯' : '✕';
+        var onclick = slot.available ? ' onclick="selectSlot(\'' + slot.time + '\')"' : '';
+
+        html += '<div class="' + cls + '" data-time="' + slot.time + '"' + onclick + '>' +
+          '<div class="slot-time">' + slot.time + '</div>' +
+          '<div class="slot-icon">' + icon + '</div>' +
+        '</div>';
       });
-    }
+
+      html += '</div>';
+      content.innerHTML = html;
+    })
+    .catch(function() {
+      content.innerHTML = '<div class="slots-empty">接続エラーが発生しました。</div>';
+    });
+}
 
     function selectSlot(time) {
       state.selectedTime = time;
