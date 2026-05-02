@@ -661,7 +661,61 @@
   <script>
     // ===== CONFIG =====
     // ★ デプロイ後にGASのWebアプリURLに書き換える
-    var API_BASE = 'https://script.google.com/macros/s/AKfycbxzphUXhjAEwxFsj6napghnfRZh7R7p15L_iDfKwM9p56wdRrDsIbQrXzggFdqjgihY/exec';
+    var API_BASE = 'YOUR_GAS_WEB_APP_URL';
+
+    // ===== JSONP通信ヘルパー（GAS CORS回避） =====
+    var _jsonpId = 0;
+    /**
+     * GAS APIをJSONP（scriptタグ挿入）で呼び出す
+     * GASのdoGetに callback パラメータを渡し、JSONP形式で返してもらう
+     */
+    function gasGet(params, callback) {
+      var cbName = '_gasCallback_' + (++_jsonpId);
+      window[cbName] = function(data) {
+        delete window[cbName];
+        var script = document.getElementById(cbName);
+        if (script) script.remove();
+        callback(null, data);
+      };
+      var qs = Object.keys(params).map(function(k) {
+        return encodeURIComponent(k) + '=' + encodeURIComponent(params[k]);
+      }).join('&');
+      var url = API_BASE + '?' + qs + '&callback=' + cbName;
+      var script = document.createElement('script');
+      script.id = cbName;
+      script.src = url;
+      script.onerror = function() {
+        delete window[cbName];
+        script.remove();
+        callback(new Error('接続エラー'), null);
+      };
+      document.body.appendChild(script);
+    }
+
+    /**
+     * POST相当の処理をGET経由のJSONPで実行
+     * bodyをpayloadパラメータとして送る
+     */
+    function gasPost(body, callback) {
+      var cbName = '_gasCallback_' + (++_jsonpId);
+      window[cbName] = function(data) {
+        delete window[cbName];
+        var script = document.getElementById(cbName);
+        if (script) script.remove();
+        callback(null, data);
+      };
+      var payload = encodeURIComponent(JSON.stringify(body));
+      var url = API_BASE + '?payload=' + payload + '&callback=' + cbName;
+      var script = document.createElement('script');
+      script.id = cbName;
+      script.src = url;
+      script.onerror = function() {
+        delete window[cbName];
+        script.remove();
+        callback(new Error('接続エラー'), null);
+      };
+      document.body.appendChild(script);
+    }
 
     // ===== STATE =====
     var state = {
@@ -685,22 +739,17 @@
 
     function loadSettings() {
       showLoading('設定を読み込み中...');
-      fetch(API_BASE + '?action=getSettings')
-        .then(function(r) { return r.json(); })
-        .then(function(data) {
-          hideLoading();
-          if (data.error) { showError(data.error); return; }
-          state.menus = data.menus || [];
-          state.closedDay = data.closed_day;
-          state.bufferMin = data.buffer_min;
-          state.dailyMax = data.daily_max_reservations;
-          state.bookableUntil = data.bookable_until ? new Date(data.bookable_until + 'T23:59:59') : null;
-          renderMenus();
-        })
-        .catch(function(err) {
-          hideLoading();
-          showError('接続エラーが発生しました。しばらくしてから再度お試しください。');
-        });
+      gasGet({ action: 'getSettings' }, function(err, data) {
+        hideLoading();
+        if (err || !data) { showError('接続エラーが発生しました。しばらくしてから再度お試しください。'); return; }
+        if (data.error) { showError(data.error); return; }
+        state.menus = data.menus || [];
+        state.closedDay = data.closed_day;
+        state.bufferMin = data.buffer_min;
+        state.dailyMax = data.daily_max_reservations;
+        state.bookableUntil = data.bookable_until ? new Date(data.bookable_until + 'T23:59:59') : null;
+        renderMenus();
+      });
     }
 
     // ===== MENU RENDERING =====
@@ -734,7 +783,6 @@
 
     // ===== NAVIGATION =====
     function goToStep(step) {
-      // Validation before moving forward
       if (step === 3 && !state.selectedTime) {
         showError('時間を選択してください。');
         return;
@@ -751,7 +799,6 @@
           showError('メールアドレスの形式が正しくありません。');
           return;
         }
-        // Populate confirmation
         var menuData = state.menus.find(function(m) { return m.name === state.selectedMenu; });
         var dateObj = new Date(state.selectedDate + 'T00:00:00');
         var dayNames = ['日','月','火','水','木','金','土'];
@@ -769,12 +816,9 @@
       }
 
       clearError();
-
-      // Hide all steps
       document.querySelectorAll('.step-section').forEach(function(s) { s.classList.remove('active'); });
       document.getElementById('step' + step).classList.add('active');
 
-      // Update progress
       document.querySelectorAll('.progress-step').forEach(function(ps) {
         var s = parseInt(ps.dataset.step);
         ps.classList.remove('active', 'done');
@@ -782,15 +826,8 @@
         if (s === step) ps.classList.add('active');
       });
 
-      // Special actions
-      if (step === 2) {
-        renderCalendar();
-        loadClosures();
-      }
-
-      // Hide progress on step 5
+      if (step === 2) { renderCalendar(); loadClosures(); }
       document.getElementById('progress').style.display = step === 5 ? 'none' : 'flex';
-
       window.scrollTo(0, 0);
     }
 
@@ -802,7 +839,6 @@
 
       document.getElementById('calMonth').textContent = year + '年 ' + (month + 1) + '月';
 
-      // Prev/next button limits (use bookableUntil from API)
       var thisMonth = new Date(now.getFullYear(), now.getMonth(), 1);
       var limitDate = state.bookableUntil || new Date(now.getFullYear(), now.getMonth() + 1, 0);
       var maxMonthVal = new Date(limitDate.getFullYear(), limitDate.getMonth(), 1);
@@ -812,7 +848,6 @@
       var grid = document.getElementById('calendarGrid');
       grid.innerHTML = '';
 
-      // Weekday headers
       var weekdays = ['日','月','火','水','木','金','土'];
       weekdays.forEach(function(w) {
         var div = document.createElement('div');
@@ -824,20 +859,16 @@
       var firstDay = new Date(year, month, 1).getDay();
       var daysInMonth = new Date(year, month + 1, 0).getDate();
 
-      // today for comparison
       var today = new Date();
       today.setHours(0,0,0,0);
-      // maxDate = bookableUntil (from API, reflects the 20th rule)
       var maxDate = state.bookableUntil || new Date(today.getFullYear(), today.getMonth() + 1, 0);
 
-      // Empty cells
       for (var e = 0; e < firstDay; e++) {
         var emptyDiv = document.createElement('div');
         emptyDiv.className = 'calendar-day empty';
         grid.appendChild(emptyDiv);
       }
 
-      // Day cells
       for (var d = 1; d <= daysInMonth; d++) {
         var date = new Date(year, month, d);
         var dateStr = formatDateStr(date);
@@ -845,19 +876,14 @@
         dayDiv.className = 'calendar-day';
         dayDiv.textContent = d;
 
-        // Sunday/Saturday colors
         if (date.getDay() === 0) dayDiv.classList.add('sunday');
         if (date.getDay() === 6) dayDiv.classList.add('saturday');
-
-        // Today marker
         if (date.getTime() === today.getTime()) dayDiv.classList.add('today');
 
-        // Disabled conditions
         var disabled = false;
         if (date < today) disabled = true;
         if (date > maxDate) disabled = true;
         if (date.getDay() === state.closedDay) disabled = true;
-        // Check closures
         if (state.closures[dateStr] && state.closures[dateStr].type === 'full_day') disabled = true;
 
         if (disabled) {
@@ -867,9 +893,7 @@
           dayDiv.onclick = function() { selectDate(this.dataset.date); };
         }
 
-        // Selected state
         if (state.selectedDate === dateStr) dayDiv.classList.add('selected');
-
         grid.appendChild(dayDiv);
       }
     }
@@ -888,32 +912,23 @@
       state.selectedDate = dateStr;
       state.selectedTime = null;
       document.getElementById('btnStep2Next').disabled = true;
-
-      // Update calendar selection
       document.querySelectorAll('.calendar-day').forEach(function(d) {
         d.classList.toggle('selected', d.dataset.date === dateStr);
       });
-
       loadSlots(dateStr);
     }
 
     function loadClosures() {
       var year = state.currentMonth.getFullYear();
       var month = ('0' + (state.currentMonth.getMonth() + 1)).slice(-2);
-      var monthStr = year + '-' + month;
-
-      fetch(API_BASE + '?action=getClosures&month=' + monthStr)
-        .then(function(r) { return r.json(); })
-        .then(function(data) {
-          if (data.success && data.closures) {
-            state.closures = {};
-            data.closures.forEach(function(c) {
-              state.closures[c.date] = c;
-            });
-            renderCalendar();
-          }
-        })
-        .catch(function() { /* ignore */ });
+      gasGet({ action: 'getClosures', month: year + '-' + month }, function(err, data) {
+        if (err || !data) return;
+        if (data.success && data.closures) {
+          state.closures = {};
+          data.closures.forEach(function(c) { state.closures[c.date] = c; });
+          renderCalendar();
+        }
+      });
     }
 
     // ===== SLOTS =====
@@ -929,38 +944,25 @@
       var content = document.getElementById('slotsContent');
       content.innerHTML = '<div class="slots-loading"><div class="spinner" style="margin:0 auto;"></div><div style="margin-top:12px;">空き状況を確認中...</div></div>';
 
-      fetch(API_BASE + '?action=getSlots&date=' + dateStr + '&menu=' + encodeURIComponent(state.selectedMenu))
-        .then(function(r) { return r.json(); })
-        .then(function(data) {
-          if (data.error) {
-            content.innerHTML = '<div class="slots-empty">' + data.error + '</div>';
-            return;
-          }
-          if (data.closed) {
-            content.innerHTML = '<div class="slots-empty">' + (data.reason || 'この日は予約を受け付けておりません。') + '</div>';
-            return;
-          }
-          if (!data.slots || data.slots.length === 0) {
-            content.innerHTML = '<div class="slots-empty">空き枠がありません。</div>';
-            return;
-          }
+      gasGet({ action: 'getSlots', date: dateStr, menu: state.selectedMenu }, function(err, data) {
+        if (err || !data) { content.innerHTML = '<div class="slots-empty">接続エラーが発生しました。</div>'; return; }
+        if (data.error) { content.innerHTML = '<div class="slots-empty">' + data.error + '</div>'; return; }
+        if (data.closed) { content.innerHTML = '<div class="slots-empty">' + (data.reason || 'この日は予約を受け付けておりません。') + '</div>'; return; }
+        if (!data.slots || data.slots.length === 0) { content.innerHTML = '<div class="slots-empty">空き枠がありません。</div>'; return; }
 
-          var html = '<div class="slots-grid">';
-          data.slots.forEach(function(slot) {
-            var cls = slot.available ? 'slot available' : 'slot unavailable';
-            var icon = slot.available ? '◯' : '✕';
-            var onclick = slot.available ? ' onclick="selectSlot(\'' + slot.time + '\')"' : '';
-            html += '<div class="' + cls + '" data-time="' + slot.time + '"' + onclick + '>' +
-              '<div class="slot-time">' + slot.time + '</div>' +
-              '<div class="slot-icon">' + icon + '</div>' +
-            '</div>';
-          });
-          html += '</div>';
-          content.innerHTML = html;
-        })
-        .catch(function() {
-          content.innerHTML = '<div class="slots-empty">接続エラーが発生しました。</div>';
+        var html = '<div class="slots-grid">';
+        data.slots.forEach(function(slot) {
+          var cls = slot.available ? 'slot available' : 'slot unavailable';
+          var icon = slot.available ? '◯' : '✕';
+          var onclick = slot.available ? ' onclick="selectSlot(\'' + slot.time + '\')"' : '';
+          html += '<div class="' + cls + '" data-time="' + slot.time + '"' + onclick + '>' +
+            '<div class="slot-time">' + slot.time + '</div>' +
+            '<div class="slot-icon">' + icon + '</div>' +
+          '</div>';
         });
+        html += '</div>';
+        content.innerHTML = html;
+      });
     }
 
     function selectSlot(time) {
@@ -988,21 +990,19 @@
       showLoading('予約を確定しています...');
       document.getElementById('btnSubmit').disabled = true;
 
-      fetch(API_BASE, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body)
-      })
-      .then(function(r) { return r.json(); })
-      .then(function(data) {
+      gasPost(body, function(err, data) {
         hideLoading();
+        if (err || !data) {
+          document.getElementById('btnSubmit').disabled = false;
+          showError('接続エラーが発生しました。しばらくしてから再度お試しください。');
+          return;
+        }
         if (data.error) {
           document.getElementById('btnSubmit').disabled = false;
           showError(data.error);
           return;
         }
 
-        // Success! Show completion
         var dateObj = new Date(state.selectedDate + 'T00:00:00');
         var dayNames = ['日','月','火','水','木','金','土'];
         var dateStr = dateObj.getFullYear() + '年' +
@@ -1015,11 +1015,6 @@
         document.getElementById('completeDateTime').textContent = dateStr + ' ' + state.selectedTime + '〜' + endTime;
 
         goToStep(5);
-      })
-      .catch(function() {
-        hideLoading();
-        document.getElementById('btnSubmit').disabled = false;
-        showError('接続エラーが発生しました。しばらくしてから再度お試しください。');
       });
     }
 
