@@ -283,7 +283,7 @@
       </div>
       <div class="form-row">
         <div class="form-group"><label class="form-label">日付</label><input class="form-input" type="date" id="mDate"></div>
-        <div class="form-group"><label class="form-label">開始時刻</label><input class="form-input" type="time" id="mTime" step="600"></div>
+        <div class="form-group"><label class="form-label">開始時刻</label><select class="form-select" id="mTime"></select></div>
       </div>
       <label style="font-size:12px;color:var(--gray-600);"><input type="checkbox" id="mSkipNotify"> メール通知を送らない</label>
       <div class="modal-footer">
@@ -317,7 +317,7 @@
       <div id="bulkDateList">
         <div class="form-row bulk-row">
           <div class="form-group"><label class="form-label">日付</label><input class="form-input" type="date" name="bulkDate"></div>
-          <div class="form-group"><label class="form-label">開始時刻</label><input class="form-input" type="time" name="bulkTime" step="600"></div>
+          <div class="form-group"><label class="form-label">開始時刻</label><select class="form-select" name="bulkTime"></select></div>
         </div>
       </div>
       <button class="btn btn-outline btn-sm" onclick="addBulkRow()" style="margin-bottom:12px;">+ 日時を追加</button>
@@ -359,7 +359,7 @@
             <option value="5">金曜日</option><option value="6">土曜日</option>
           </select>
         </div>
-        <div class="form-group"><label class="form-label">開始時刻</label><input class="form-input" type="time" id="rTime" step="600"></div>
+        <div class="form-group"><label class="form-label">開始時刻</label><select class="form-select" id="rTime"></select></div>
       </div>
       <div class="modal-footer">
         <button class="btn btn-outline" onclick="closeModal('recurringModal')">キャンセル</button>
@@ -499,24 +499,21 @@
       var label = (dates[0].getMonth()+1) + '/' + dates[0].getDate() + ' 〜 ' + (dates[6].getMonth()+1) + '/' + dates[6].getDate();
       document.getElementById('weekLabel').textContent = label;
 
-      // Load all 7 days' reservations
-      weekReservations = [];
-      var loaded = 0;
+      var startDate = fmtD(dates[0]);
       var todayStr = fmtD(new Date());
 
-      dates.forEach(function(d, idx) {
-        var ds = fmtD(d);
-        apiGet('adminGetReservations', '&date=' + ds + '&status=confirmed').then(function(data) {
-          if (data.error) { if(data.code===401) doLogout(); }
-          var resvs = (data.reservations || []).map(function(r) {
-            r._dayIdx = idx;
-            r._dateStr = ds;
-            return r;
-          });
-          weekReservations = weekReservations.concat(resvs);
-          loaded++;
-          if (loaded === 7) renderWeekSchedule(dates, todayStr);
+      // 1回のAPIコールで1週間分を取得（高速）
+      apiGet('adminGetWeekReservations', '&start_date=' + startDate + '&days=7').then(function(data) {
+        if (data.error) { if(data.code===401) doLogout(); return; }
+        weekReservations = (data.reservations || []).map(function(r) {
+          // dayIdx を計算
+          for (var i = 0; i < dates.length; i++) {
+            if (fmtD(dates[i]) === r.date) { r._dayIdx = i; break; }
+          }
+          r._dateStr = r.date;
+          return r;
         });
+        renderWeekSchedule(dates, todayStr);
       });
     }
 
@@ -593,13 +590,23 @@
       document.getElementById('detailModal').classList.add('show');
     }
 
-    function populateTimeSelect(id) {
-      var sel = document.getElementById(id);
+    function populateTimeSelect(target) {
+      var sel = (typeof target === 'string') ? document.getElementById(target) : target;
+      if (!sel) return;
       sel.innerHTML = '';
       for (var m = 8*60+50; m <= 22*60+30; m += 10) {
         var t = ('0'+Math.floor(m/60)).slice(-2) + ':' + ('0'+(m%60)).slice(-2);
         sel.innerHTML += '<option value="' + t + '">' + t + '</option>';
       }
+    }
+
+    // Initialize all time selects when modals open
+    function initTimeSelects() {
+      populateTimeSelect('mTime');
+      populateTimeSelect('rTime');
+      document.querySelectorAll('select[name="bulkTime"]').forEach(function(el) {
+        if (el.options.length === 0) populateTimeSelect(el);
+      });
     }
 
     function submitDetailChange() {
@@ -689,9 +696,9 @@
     }
 
     // ===== MODALS =====
-    function openCreateModal(){document.getElementById('createModal').classList.add('show');}
-    function openBulkModal(){document.getElementById('bulkModal').classList.add('show');}
-    function openRecurringModal(){document.getElementById('recurringModal').classList.add('show');}
+    function openCreateModal(){initTimeSelects();document.getElementById('createModal').classList.add('show');}
+    function openBulkModal(){initTimeSelects();document.getElementById('bulkModal').classList.add('show');}
+    function openRecurringModal(){initTimeSelects();document.getElementById('recurringModal').classList.add('show');}
     function openClosureModal(){document.getElementById('closureModal').classList.add('show');}
     function closeModal(id){document.getElementById(id).classList.remove('show');}
 
@@ -717,13 +724,14 @@
       var div = document.createElement('div');
       div.className = 'form-row bulk-row';
       div.innerHTML = '<div class="form-group"><label class="form-label">日付</label><input class="form-input" type="date" name="bulkDate"></div>' +
-        '<div class="form-group"><label class="form-label">開始時刻</label><input class="form-input" type="time" name="bulkTime" step="600"></div>';
+        '<div class="form-group"><label class="form-label">開始時刻</label><select class="form-select" name="bulkTime"></select></div>';
       document.getElementById('bulkDateList').appendChild(div);
+      populateTimeSelect(div.querySelector('select[name="bulkTime"]'));
     }
 
     function submitBulk() {
       var dates = document.querySelectorAll('input[name="bulkDate"]');
-      var times = document.querySelectorAll('input[name="bulkTime"]');
+      var times = document.querySelectorAll('select[name="bulkTime"]');
       var reservations = [];
       for (var i = 0; i < dates.length; i++) {
         if (dates[i].value && times[i].value) {
