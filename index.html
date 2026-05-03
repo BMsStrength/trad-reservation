@@ -230,6 +230,8 @@
     .slot-table th.sat { color: var(--brand-blue); }
     .slot-table th.tue { color: var(--gray-400); }
     .slot-table th.today-col { background: var(--brand-blue-pale); }
+    .slot-table th.closed-col { background: #f0f0f0; color: var(--gray-400); }
+    .slot-table th.past-col { background: #f5f5f5; color: var(--gray-400); }
 
     .slot-table td {
       text-align: center;
@@ -249,6 +251,8 @@
       border-right: 2px solid var(--gray-200);
     }
     .slot-table td.today-col { background: rgba(227,242,253,0.25); }
+    .slot-table td.closed-col { background: #f5f5f5; }
+    .slot-table td.past-col { background: #fafafa; }
 
     .slot-mark {
       display: inline-flex; align-items: center; justify-content: center;
@@ -480,6 +484,10 @@
     <!-- ===== STEP 2: Date/Time Selection (2-week table) ===== -->
     <div class="step-section" id="step2">
       <h2 class="section-title">日時を選択</h2>
+      <p style="font-size:13px;color:var(--gray-600);margin-bottom:8px;">
+        選択中のメニュー: <strong id="step2MenuLabel"></strong>
+        <a href="#" onclick="goToStep(1);return false;" style="color:var(--brand-blue);margin-left:8px;font-size:12px;">メニューを変更</a>
+      </p>
 
       <div class="week-nav">
         <button class="week-nav-btn" id="weekPrev" onclick="changeWeekPage(-1)">‹ 前の週へ</button>
@@ -758,7 +766,12 @@
         if (s === step) ps.classList.add('active');
       });
 
-      if (step === 2) { slotCache = {}; weekPage = 0; loadWeekTable(); }
+      if (step === 2) {
+        slotCache = {}; weekPage = 0;
+        var menuData2 = state.menus.find(function(m) { return m.name === state.selectedMenu; });
+        document.getElementById('step2MenuLabel').textContent = state.selectedMenu + '（' + (menuData2 ? menuData2.duration : '') + '分）';
+        loadWeekTable();
+      }
       document.getElementById('progress').style.display = step === 5 ? 'none' : 'flex';
       window.scrollTo(0, 0);
     }
@@ -849,7 +862,8 @@
 
     function renderSlotTable(dates, allSlots) {
       var dayNames = ['日','月','火','水','木','金','土'];
-      var todayStr = formatDateStr(new Date());
+      var today = new Date(); today.setHours(0,0,0,0);
+      var todayStr = formatDateStr(today);
 
       // Collect all unique times across all dates
       var timeSet = {};
@@ -867,29 +881,48 @@
         return;
       }
 
-      // Build table
+      // Build header
       var html = '<div class="slot-table-wrap"><table class="slot-table"><thead><tr><th>日時</th>';
       dates.forEach(function(d) {
         var ds = formatDateStr(d);
         var dow = d.getDay();
-        var cls = '';
-        if (dow === 0) cls = 'sun';
-        if (dow === 6) cls = 'sat';
-        if (dow === 2) cls = 'tue';
-        if (ds === todayStr) cls += ' today-col';
-        html += '<th class="' + cls + '">' + d.getDate() + '<br><span style="font-size:10px;">(' + dayNames[dow] + ')</span></th>';
+        var clsList = [];
+        if (dow === 0) clsList.push('sun');
+        if (dow === 6) clsList.push('sat');
+        if (dow === state.closedDay) clsList.push('closed-col');
+        if (d <= today) clsList.push('past-col');
+        if (ds === todayStr) clsList.push('today-col');
+        html += '<th class="' + clsList.join(' ') + '">' +
+          (d.getMonth()+1) + '/' + d.getDate() + '<br><span style="font-size:10px;">(' + dayNames[dow] + ')</span></th>';
       });
       html += '</tr></thead><tbody>';
 
+      // Build rows
       times.forEach(function(time) {
-        html += '<tr><td>' + time + '</td>';
+        var mins = time.split(':');
+        var isFullHour = (parseInt(mins[1]) === 0);
+        var timeTd = isFullHour
+          ? '<td style="font-size:13px;font-weight:700;">' + time + '</td>'
+          : '<td>' + time + '</td>';
+        html += '<tr>' + timeTd;
+
         dates.forEach(function(d) {
           var ds = formatDateStr(d);
-          var isToday = ds === todayStr;
-          var tdCls = isToday ? ' class="today-col"' : '';
-          var info = allSlots[ds];
+          var dow = d.getDay();
+          var tdClasses = [];
+          if (ds === todayStr) tdClasses.push('today-col');
+          if (dow === state.closedDay) tdClasses.push('closed-col');
+          if (d <= today) tdClasses.push('past-col');
+          var tdCls = tdClasses.length ? ' class="' + tdClasses.join(' ') + '"' : '';
 
-          if (!info || info.closed || d.getDay() === state.closedDay) {
+          // Closed day or past date — show empty gray cell
+          if (dow === state.closedDay || d <= today) {
+            html += '<td' + tdCls + '></td>';
+            return;
+          }
+
+          var info = allSlots[ds];
+          if (!info || info.closed) {
             html += '<td' + tdCls + '></td>';
             return;
           }
@@ -955,44 +988,76 @@
     function submitReservation() {
       var menuData = state.menus.find(function(m) { return m.name === state.selectedMenu; });
 
-      var body = {
-        action: 'createReservation',
-        customer_name: document.getElementById('inputName').value.trim(),
-        customer_email: document.getElementById('inputEmail').value.trim(),
-        customer_phone: document.getElementById('inputPhone').value.trim(),
-        menu: state.selectedMenu,
-        date: state.selectedDate,
-        start_time: state.selectedTime
-      };
-
-      showLoading('予約を確定しています...');
+      showLoading('空き状況を再確認中...');
       document.getElementById('btnSubmit').disabled = true;
 
-      gasPost(body, function(err, data) {
-        hideLoading();
-        if (err || !data) {
+      // 楽観ロック: 確定前にもう一度空きを確認
+      gasGet({ action: 'getSlots', date: state.selectedDate, menu: state.selectedMenu }, function(err, slotData) {
+        if (err || !slotData) {
+          hideLoading();
           document.getElementById('btnSubmit').disabled = false;
-          showError('接続エラーが発生しました。しばらくしてから再度お試しください。');
-          return;
-        }
-        if (data.error) {
-          document.getElementById('btnSubmit').disabled = false;
-          showError(data.error);
+          showError('接続エラーが発生しました。');
           return;
         }
 
-        var dateObj = new Date(state.selectedDate + 'T00:00:00');
-        var dayNames = ['日','月','火','水','木','金','土'];
-        var dateStr = dateObj.getFullYear() + '年' +
-          (dateObj.getMonth()+1) + '月' + dateObj.getDate() + '日（' +
-          dayNames[dateObj.getDay()] + '）';
-        var startMin = timeToMin(state.selectedTime);
-        var endTime = minToTime(startMin + menuData.duration);
+        // 選択した枠がまだ空いているか確認
+        var stillAvail = false;
+        if (slotData.slots) {
+          for (var i = 0; i < slotData.slots.length; i++) {
+            if (slotData.slots[i].time === state.selectedTime && slotData.slots[i].available) {
+              stillAvail = true; break;
+            }
+          }
+        }
+        if (!stillAvail) {
+          hideLoading();
+          document.getElementById('btnSubmit').disabled = false;
+          showError('申し訳ございません。この枠はすでに予約が入りました。別の日時を選択してください。');
+          // キャッシュをクリアして再表示
+          slotCache = {};
+          goToStep(2);
+          return;
+        }
 
-        document.getElementById('completeMenu').textContent = state.selectedMenu + '（' + menuData.duration + '分）';
-        document.getElementById('completeDateTime').textContent = dateStr + ' ' + state.selectedTime + '〜' + endTime;
+        // 空いていたので予約実行
+        var body = {
+          action: 'createReservation',
+          customer_name: document.getElementById('inputName').value.trim(),
+          customer_email: document.getElementById('inputEmail').value.trim(),
+          customer_phone: document.getElementById('inputPhone').value.trim(),
+          menu: state.selectedMenu,
+          date: state.selectedDate,
+          start_time: state.selectedTime
+        };
 
-        goToStep(5);
+        document.getElementById('loadingText').textContent = '予約を確定しています...';
+
+        gasPost(body, function(err2, data) {
+          hideLoading();
+          if (err2 || !data) {
+            document.getElementById('btnSubmit').disabled = false;
+            showError('接続エラーが発生しました。しばらくしてから再度お試しください。');
+            return;
+          }
+          if (data.error) {
+            document.getElementById('btnSubmit').disabled = false;
+            showError(data.error);
+            return;
+          }
+
+          var dateObj = new Date(state.selectedDate + 'T00:00:00');
+          var dayNames = ['日','月','火','水','木','金','土'];
+          var dateStr = dateObj.getFullYear() + '年' +
+            (dateObj.getMonth()+1) + '月' + dateObj.getDate() + '日（' +
+            dayNames[dateObj.getDay()] + '）';
+          var startMin = timeToMin(state.selectedTime);
+          var endTime = minToTime(startMin + menuData.duration);
+
+          document.getElementById('completeMenu').textContent = state.selectedMenu + '（' + menuData.duration + '分）';
+          document.getElementById('completeDateTime').textContent = dateStr + ' ' + state.selectedTime + '〜' + endTime;
+
+          goToStep(5);
+        });
       });
     }
 

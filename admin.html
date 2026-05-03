@@ -65,6 +65,21 @@
     .sched-event:hover{opacity:0.85;}
     .sched-closed{background:var(--gray-200);opacity:0.5;}
 
+    /* Mobile responsive */
+    @media (max-width: 768px) {
+      .tabs{flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch;}
+      .tab{padding:10px 14px;font-size:12px;}
+      .content{padding:12px 8px;}
+      .card{padding:14px;}
+      .modal{padding:16px;margin:8px;}
+      .form-row{flex-direction:column;gap:8px;}
+      .form-group{min-width:auto;}
+      .card-title{flex-direction:column;gap:8px;}
+      .card-title > div{width:100%;}
+      table{font-size:11px;}
+      th,td{padding:6px 4px;}
+    }
+
     /* Buttons */
     .btn{padding:8px 16px;border:none;border-radius:var(--radius-sm);font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;transition:all 0.15s;}
     .btn-sm{padding:4px 10px;font-size:11px;}
@@ -138,6 +153,7 @@
       <div class="tab" data-tab="reservations" onclick="switchTab('reservations')">予約管理</div>
       <div class="tab" data-tab="recurring" onclick="switchTab('recurring')">繰り返し</div>
       <div class="tab" data-tab="closures" onclick="switchTab('closures')">休業管理</div>
+      <div class="tab" data-tab="blocks" onclick="switchTab('blocks')">ブロック</div>
       <div class="tab" data-tab="customers" onclick="switchTab('customers')">顧客</div>
     </div>
 
@@ -245,13 +261,49 @@
         </div>
       </div>
 
+      <!-- Blocks -->
+      <div class="panel" id="panel-blocks">
+        <div class="card">
+          <div class="card-title">
+            <span>予約ブロック（手動）</span>
+            <button class="btn btn-primary btn-sm" onclick="openBlockModal()">+ 追加</button>
+          </div>
+          <p style="font-size:12px;color:var(--gray-500);margin-bottom:12px;">特定の時間帯を予約不可にします。</p>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>日付</th><th>時間</th><th>理由</th><th>操作</th></tr></thead>
+              <tbody id="blockTableBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- Block Modal -->
+      <div class="modal-overlay" id="blockModal">
+        <div class="modal">
+          <div class="modal-title">予約ブロックを追加</div>
+          <div class="form-row">
+            <div class="form-group"><label class="form-label">日付</label><input class="form-input" type="date" id="blkDate"></div>
+          </div>
+          <div class="form-row">
+            <div class="form-group"><label class="form-label">開始時刻</label><select class="form-select" id="blkStart"></select></div>
+            <div class="form-group"><label class="form-label">終了時刻</label><select class="form-select" id="blkEnd"></select></div>
+          </div>
+          <div class="form-group"><label class="form-label">理由（任意）</label><input class="form-input" id="blkReason"></div>
+          <div class="modal-footer">
+            <button class="btn btn-outline" onclick="closeModal('blockModal')">キャンセル</button>
+            <button class="btn btn-primary" onclick="submitBlock()">追加</button>
+          </div>
+        </div>
+      </div>
+
       <!-- Customers -->
       <div class="panel" id="panel-customers">
         <div class="card">
           <div class="card-title">顧客一覧</div>
           <div class="table-wrap">
             <table>
-              <thead><tr><th>名前</th><th>メール</th><th>電話</th><th>登録日</th></tr></thead>
+              <thead><tr><th>名前</th><th>メール</th><th>電話</th><th>メモ</th><th>登録日</th></tr></thead>
               <tbody id="customerTableBody"></tbody>
             </table>
           </div>
@@ -449,6 +501,7 @@
       if (tab==='reservations') loadReservations();
       if (tab==='recurring') loadRecurring();
       if (tab==='closures') loadClosures();
+      if (tab==='blocks') loadBlocks();
       if (tab==='customers') loadCustomers();
     }
 
@@ -539,7 +592,14 @@
       }
       grid.innerHTML = html;
 
-      // Place events
+      // Place events with menu color coding
+      var menuColors = {
+        'パーソナルトレーニング': '#1565C0',
+        'ペアトレーニング': '#E65100',
+        'メンテナンス': '#2E7D32',
+        '無料体験': '#6A1B9A'
+      };
+
       weekReservations.forEach(function(r) {
         var st = r.start_time || '';
         var et = r.end_time || '';
@@ -552,29 +612,34 @@
 
         var cells = grid.querySelectorAll('.sched-cell[data-day="' + r._dayIdx + '"]');
         if (cells.length === 0) return;
-        var container = cells[0].parentElement;
 
-        // Find the first cell of this day column to position relative to
         var cell0 = cells[0];
         var ev = document.createElement('div');
         ev.className = 'sched-event';
         ev.style.top = (topPx) + 'px';
         ev.style.height = heightPx + 'px';
-        ev.textContent = st.slice(0,5) + ' ' + r.customer_name;
+        ev.style.background = menuColors[r.menu] || '#1565C0';
+
+        var recurIcon = r.series_id ? '🔄 ' : '';
+        ev.textContent = recurIcon + st.slice(0,5) + ' ' + r.customer_name;
+        ev.title = r.menu + ' ' + st + '〜' + et;
         ev.onclick = (function(resv) { return function() { openDetail(resv); }; })(r);
 
-        // Append to the first cell (they're all relative positioned)
         cell0.style.position = 'relative';
         cell0.appendChild(ev);
+      });
       });
     }
 
     // ===== DETAIL MODAL =====
     function openDetail(r) {
       currentDetailResv = r;
+      var recurBadge = r.series_id ? '<span style="background:#FFF3E0;color:#E65100;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:700;margin-left:6px;">繰り返し</span>' : '';
+      var menuColor = {'パーソナルトレーニング':'#1565C0','ペアトレーニング':'#E65100','メンテナンス':'#2E7D32','無料体験':'#6A1B9A'}[r.menu] || '#1565C0';
+
       var html = '<div style="font-size:14px;line-height:2;">' +
-        '<b>お客様:</b> ' + r.customer_name + '<br>' +
-        '<b>メニュー:</b> ' + r.menu + '<br>' +
+        '<b>お客様:</b> ' + r.customer_name + recurBadge + '<br>' +
+        '<b>メニュー:</b> <span style="color:' + menuColor + ';font-weight:700;">' + r.menu + '</span><br>' +
         '<b>日付:</b> ' + r.date + '<br>' +
         '<b>時間:</b> ' + r.start_time + '〜' + r.end_time + '<br>' +
         '<b>メール:</b> ' + (r.customer_email || '-') + '<br>' +
@@ -850,12 +915,67 @@
         if(data.error) return;
         var tbody = document.getElementById('customerTableBody');
         var rows = data.customers||[];
-        if(rows.length===0){tbody.innerHTML='<tr><td colspan="4" style="text-align:center;color:var(--gray-500);">顧客がいません</td></tr>';return;}
+        if(rows.length===0){tbody.innerHTML='<tr><td colspan="5" style="text-align:center;color:var(--gray-500);">顧客がいません</td></tr>';return;}
         var html='';
         rows.forEach(function(c){
-          html += '<tr><td>' + c.name + '</td><td>' + (c.email||'-') + '</td><td>' + (c.phone||'-') + '</td><td>' + (c.created_at||'-').slice(0,10) + '</td></tr>';
+          html += '<tr><td>' + c.name + '</td><td>' + (c.email||'-') + '</td><td>' + (c.phone||'-') + '</td>' +
+            '<td><input class="form-input" style="padding:4px 6px;font-size:11px;min-width:100px;" value="' + (c.notes||'').replace(/"/g,'&quot;') + '" ' +
+            'onchange="saveCustomerNotes(\'' + c.id + '\',this.value)" placeholder="メモ"></td>' +
+            '<td>' + (c.created_at||'-').slice(0,10) + '</td></tr>';
         });
         tbody.innerHTML=html;
+      });
+    }
+
+    function saveCustomerNotes(customerId, notes) {
+      apiPost({ action: 'adminUpdateCustomerNotes', customer_id: customerId, notes: notes }).then(function(data) {
+        if (data.error) alert(data.error);
+      });
+    }
+
+    // ===== BLOCKS =====
+    function openBlockModal() {
+      initTimeSelects();
+      populateTimeSelect('blkStart');
+      populateTimeSelect('blkEnd');
+      document.getElementById('blockModal').classList.add('show');
+    }
+
+    function loadBlocks() {
+      apiGet('adminGetBlocks').then(function(data) {
+        if (data.error) return;
+        var tbody = document.getElementById('blockTableBody');
+        var rows = data.blocks || [];
+        if (rows.length === 0) { tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:var(--gray-500);">ブロックはありません</td></tr>'; return; }
+        var html = '';
+        rows.forEach(function(b) {
+          html += '<tr><td>' + b.date + '</td><td>' + b.start_time + '〜' + b.end_time + '</td><td>' + (b.reason || '-') + '</td>' +
+            '<td><button class="btn btn-danger btn-sm" onclick="deleteBlock(\'' + b.id + '\')">削除</button></td></tr>';
+        });
+        tbody.innerHTML = html;
+      });
+    }
+
+    function submitBlock() {
+      var body = {
+        action: 'adminCreateBlock',
+        date: document.getElementById('blkDate').value,
+        start_time: document.getElementById('blkStart').value,
+        end_time: document.getElementById('blkEnd').value,
+        reason: document.getElementById('blkReason').value
+      };
+      apiPost(body).then(function(data) {
+        if (data.error) { alert(data.error); return; }
+        closeModal('blockModal');
+        loadBlocks();
+      });
+    }
+
+    function deleteBlock(id) {
+      if (!confirm('このブロックを削除しますか？')) return;
+      apiPost({ action: 'adminDeleteBlock', id: id }).then(function(data) {
+        if (data.error) { alert(data.error); return; }
+        loadBlocks();
       });
     }
   </script>

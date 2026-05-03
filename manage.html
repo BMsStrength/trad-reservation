@@ -159,7 +159,23 @@
       if (r.is_recurring) {
         html += '<div class="recurring-note">この予約は繰り返し予約です。変更・キャンセルはジムに直接ご連絡ください。</div>';
       } else if (r.can_modify && r.status === 'confirmed') {
-        html += '<div style="margin-top:16px;">' +
+        // 変更フォーム
+        html += '<div class="card" style="margin-top:16px;">' +
+          '<div class="card-title">予約を変更する</div>' +
+          '<div style="margin-bottom:12px;">' +
+            '<label style="font-size:13px;font-weight:600;display:block;margin-bottom:4px;">新しい日付</label>' +
+            '<input type="date" id="changeDateInput" style="width:100%;padding:10px;border:1px solid #e0e0e0;border-radius:8px;font-size:14px;" onchange="loadChangeSlots()">' +
+          '</div>' +
+          '<div style="margin-bottom:12px;">' +
+            '<label style="font-size:13px;font-weight:600;display:block;margin-bottom:4px;">新しい時間</label>' +
+            '<select id="changeTimeSelect" style="width:100%;padding:10px;border:1px solid #e0e0e0;border-radius:8px;font-size:14px;">' +
+              '<option value="">日付を選択してください</option>' +
+            '</select>' +
+          '</div>' +
+          '<button class="btn" style="background:var(--brand-blue);color:#fff;" onclick="submitChange()">予約を変更する</button>' +
+        '</div>';
+
+        html += '<div style="margin-top:12px;">' +
           '<button class="btn btn-danger" onclick="cancelReservation()">この予約をキャンセル</button>' +
           '</div>' +
           '<p style="font-size:12px;color:var(--gray-500);text-align:center;margin-top:8px;">前日23:59まで変更・キャンセルが可能です。</p>';
@@ -168,6 +184,46 @@
       }
 
       document.getElementById('content').innerHTML = html;
+      currentResv = r;
+    }
+
+    var currentResv = null;
+
+    function loadChangeSlots() {
+      if (!currentResv) return;
+      var date = document.getElementById('changeDateInput').value;
+      if (!date) return;
+      var sel = document.getElementById('changeTimeSelect');
+      sel.innerHTML = '<option value="">読み込み中...</option>';
+
+      gasGet({ action: 'getSlots', date: date, menu: currentResv.menu }, function(err, data) {
+        sel.innerHTML = '<option value="">時間を選択</option>';
+        if (err || !data || !data.slots) return;
+        data.slots.forEach(function(s) {
+          if (s.available) {
+            sel.innerHTML += '<option value="' + s.time + '">' + s.time + ' ◯</option>';
+          }
+        });
+        if (sel.options.length <= 1) {
+          sel.innerHTML = '<option value="">空き枠がありません</option>';
+        }
+      });
+    }
+
+    function submitChange() {
+      if (!currentResv) return;
+      var newDate = document.getElementById('changeDateInput').value;
+      var newTime = document.getElementById('changeTimeSelect').value;
+      if (!newDate || !newTime) { alert('日付と時間を選択してください。'); return; }
+      if (!confirm('予約を変更しますか？')) return;
+
+      gasPost({ action: 'changeReservation', token: token, new_date: newDate, new_start_time: newTime }, function(err, data) {
+        if (err || !data) { alert('接続エラーが発生しました。'); return; }
+        if (data.error) { alert(data.error); return; }
+        document.getElementById('content').innerHTML =
+          '<div class="msg msg-success">予約を変更しました。</div>' +
+          '<p style="text-align:center;margin-top:12px;color:var(--gray-600);font-size:14px;">変更確認メールをお送りしました。</p>';
+      });
     }
 
     function cancelReservation() {
