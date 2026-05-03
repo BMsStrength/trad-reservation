@@ -55,6 +55,16 @@
     .week-count{font-size:18px;font-weight:700;color:var(--brand-blue);margin-top:4px;}
     .week-cell.today{background:var(--brand-blue-pale);}
 
+    /* Weekly schedule grid */
+    .sched-header{font-size:11px;font-weight:700;text-align:center;padding:6px 2px;background:var(--gray-50);border-bottom:2px solid var(--gray-200);position:sticky;top:0;}
+    .sched-header.today-col{background:var(--brand-blue-pale);}
+    .sched-time{font-size:10px;color:var(--gray-500);text-align:right;padding:2px 4px 2px 0;border-right:1px solid var(--gray-200);height:30px;line-height:30px;}
+    .sched-cell{border-right:1px solid var(--gray-100);border-bottom:1px solid var(--gray-100);height:30px;position:relative;}
+    .sched-cell.today-col{background:rgba(227,242,253,0.3);}
+    .sched-event{position:absolute;left:1px;right:1px;background:var(--brand-blue);color:var(--white);font-size:10px;padding:2px 4px;border-radius:3px;overflow:hidden;cursor:pointer;z-index:5;line-height:1.2;}
+    .sched-event:hover{opacity:0.85;}
+    .sched-closed{background:var(--gray-200);opacity:0.5;}
+
     /* Buttons */
     .btn{padding:8px 16px;border:none;border-radius:var(--radius-sm);font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;transition:all 0.15s;}
     .btn-sm{padding:4px 10px;font-size:11px;}
@@ -135,15 +145,51 @@
       <!-- Dashboard -->
       <div class="panel active" id="panel-dashboard">
         <div class="card">
-          <div class="card-title">今週の予約数</div>
-          <div class="week-grid" id="weekGrid"></div>
-        </div>
-        <div class="card">
           <div class="card-title">
-            <span>今日の予約</span>
+            <div style="display:flex;align-items:center;gap:8px;">
+              <button class="btn btn-outline btn-sm" onclick="changeWeek(-1)">‹ 前週</button>
+              <span id="weekLabel" style="font-size:14px;"></span>
+              <button class="btn btn-outline btn-sm" onclick="changeWeek(1)">翌週 ›</button>
+            </div>
             <button class="btn btn-primary btn-sm" onclick="openCreateModal()">+ 新規予約</button>
           </div>
-          <div id="todayTimeline"></div>
+          <div style="overflow-x:auto;">
+            <div id="weekSchedule" style="display:grid;grid-template-columns:50px repeat(7,1fr);min-width:700px;"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Reservation Detail Modal -->
+      <div class="modal-overlay" id="detailModal">
+        <div class="modal">
+          <div class="modal-title">予約詳細</div>
+          <div id="detailContent"></div>
+          <hr style="margin:16px 0;border:none;border-top:1px solid var(--gray-200);">
+
+          <div class="modal-title" style="font-size:14px;">予約変更</div>
+          <div class="form-row">
+            <div class="form-group"><label class="form-label">日付</label><input class="form-input" type="date" id="detChangeDate"></div>
+            <div class="form-group"><label class="form-label">時間</label>
+              <select class="form-select" id="detChangeTime"></select>
+            </div>
+          </div>
+          <button class="btn btn-primary btn-sm" onclick="submitDetailChange()" style="margin-bottom:12px;">変更を確定</button>
+
+          <hr style="margin:12px 0;border:none;border-top:1px solid var(--gray-200);">
+
+          <div class="modal-title" style="font-size:14px;">次回予約を作成</div>
+          <div class="form-row">
+            <div class="form-group"><label class="form-label">日付</label><input class="form-input" type="date" id="detNextDate"></div>
+            <div class="form-group"><label class="form-label">時間</label>
+              <select class="form-select" id="detNextTime"></select>
+            </div>
+          </div>
+          <button class="btn btn-success btn-sm" onclick="submitNextBooking()" style="margin-bottom:12px;">次回予約を作成</button>
+
+          <div class="modal-footer">
+            <button class="btn btn-danger btn-sm" onclick="cancelFromDetail()">キャンセル（通知なし）</button>
+            <button class="btn btn-outline" onclick="closeModal('detailModal')">閉じる</button>
+          </div>
         </div>
       </div>
 
@@ -422,42 +468,194 @@
       }};
     }
 
-    // ===== DASHBOARD =====
+    // ===== DASHBOARD (Weekly Schedule) =====
+    var weekOffset = 0;
+    var weekReservations = [];
+    var currentDetailResv = null;
+
+    function changeWeek(delta) { weekOffset += delta; loadDashboard(); }
+
+    function getWeekDates(offset) {
+      var now = new Date();
+      var day = now.getDay(); // 0=Sun
+      var monday = new Date(now);
+      monday.setDate(now.getDate() - ((day + 6) % 7) + (offset * 7));
+      monday.setHours(0,0,0,0);
+      var dates = [];
+      for (var i = 0; i < 7; i++) {
+        var d = new Date(monday);
+        d.setDate(monday.getDate() + i);
+        dates.push(d);
+      }
+      return dates;
+    }
+
+    function fmtD(d) {
+      return d.getFullYear() + '-' + ('0'+(d.getMonth()+1)).slice(-2) + '-' + ('0'+d.getDate()).slice(-2);
+    }
+
     function loadDashboard() {
-      apiGet('adminGetDashboard').then(function(data) {
-        if (data.error) { if(data.code===401) doLogout(); return; }
-        // Week grid
-        var wg = document.getElementById('weekGrid');
-        wg.innerHTML = '';
-        (data.week_summary||[]).forEach(function(d,i){
-          var div = document.createElement('div');
-          div.className = 'week-cell' + (i===0?' today':'');
-          div.innerHTML = '<div class="week-day">' + dayNames[d.day_of_week] + '</div>' +
-            '<div class="week-date">' + d.date.slice(5) + '</div>' +
-            '<div class="week-count">' + d.count + '</div>';
-          wg.appendChild(div);
+      var dates = getWeekDates(weekOffset);
+      var label = (dates[0].getMonth()+1) + '/' + dates[0].getDate() + ' 〜 ' + (dates[6].getMonth()+1) + '/' + dates[6].getDate();
+      document.getElementById('weekLabel').textContent = label;
+
+      // Load all 7 days' reservations
+      weekReservations = [];
+      var loaded = 0;
+      var todayStr = fmtD(new Date());
+
+      dates.forEach(function(d, idx) {
+        var ds = fmtD(d);
+        apiGet('adminGetReservations', '&date=' + ds + '&status=confirmed').then(function(data) {
+          if (data.error) { if(data.code===401) doLogout(); }
+          var resvs = (data.reservations || []).map(function(r) {
+            r._dayIdx = idx;
+            r._dateStr = ds;
+            return r;
+          });
+          weekReservations = weekReservations.concat(resvs);
+          loaded++;
+          if (loaded === 7) renderWeekSchedule(dates, todayStr);
         });
-        // Today timeline
-        var tl = document.getElementById('todayTimeline');
-        var reservations = data.today_reservations || [];
-        if (reservations.length === 0) {
-          tl.innerHTML = '<div class="timeline-empty">今日の予約はありません</div>';
-          return;
+      });
+    }
+
+    function renderWeekSchedule(dates, todayStr) {
+      var grid = document.getElementById('weekSchedule');
+      var dayLabels = ['月','火','水','木','金','土','日'];
+      var startHour = 8, endHour = 23;
+
+      var html = '<div class="sched-header"></div>';
+      for (var c = 0; c < 7; c++) {
+        var ds = fmtD(dates[c]);
+        var isToday = ds === todayStr;
+        html += '<div class="sched-header' + (isToday ? ' today-col' : '') + '">' +
+          dayLabels[c] + '<br>' + (dates[c].getMonth()+1) + '/' + dates[c].getDate() + '</div>';
+      }
+
+      for (var h = startHour; h < endHour; h++) {
+        html += '<div class="sched-time">' + ('0'+h).slice(-2) + ':00</div>';
+        for (var col = 0; col < 7; col++) {
+          var isT = fmtD(dates[col]) === todayStr;
+          html += '<div class="sched-cell' + (isT ? ' today-col' : '') + '" data-day="' + col + '" data-hour="' + h + '"></div>';
         }
-        var html = '';
-        reservations.forEach(function(r){
-          html += '<div class="timeline-item">' +
-            '<div class="timeline-time">' + r.start_time + '</div>' +
-            '<div class="timeline-body">' +
-              '<div class="timeline-name">' + r.customer_name + '</div>' +
-              '<div class="timeline-menu">' + r.menu + '（' + r.duration_min + '分） 〜' + r.end_time + '</div>' +
-              '<div class="timeline-actions">' +
-                '<button class="btn btn-danger btn-sm" onclick="cancelResv(\'' + r.id + '\')">キャンセル</button>' +
-              '</div>' +
-            '</div>' +
-          '</div>';
-        });
-        tl.innerHTML = html;
+      }
+      grid.innerHTML = html;
+
+      // Place events
+      weekReservations.forEach(function(r) {
+        var st = r.start_time || '';
+        var et = r.end_time || '';
+        if (!st) return;
+        var sp = st.split(':'), ep = et.split(':');
+        var startMin = parseInt(sp[0])*60 + parseInt(sp[1]);
+        var endMin = ep.length >= 2 ? parseInt(ep[0])*60 + parseInt(ep[1]) : startMin + 60;
+        var topPx = ((startMin - startHour*60) / 60) * 30;
+        var heightPx = Math.max(((endMin - startMin) / 60) * 30, 15);
+
+        var cells = grid.querySelectorAll('.sched-cell[data-day="' + r._dayIdx + '"]');
+        if (cells.length === 0) return;
+        var container = cells[0].parentElement;
+
+        // Find the first cell of this day column to position relative to
+        var cell0 = cells[0];
+        var ev = document.createElement('div');
+        ev.className = 'sched-event';
+        ev.style.top = (topPx) + 'px';
+        ev.style.height = heightPx + 'px';
+        ev.textContent = st.slice(0,5) + ' ' + r.customer_name;
+        ev.onclick = (function(resv) { return function() { openDetail(resv); }; })(r);
+
+        // Append to the first cell (they're all relative positioned)
+        cell0.style.position = 'relative';
+        cell0.appendChild(ev);
+      });
+    }
+
+    // ===== DETAIL MODAL =====
+    function openDetail(r) {
+      currentDetailResv = r;
+      var html = '<div style="font-size:14px;line-height:2;">' +
+        '<b>お客様:</b> ' + r.customer_name + '<br>' +
+        '<b>メニュー:</b> ' + r.menu + '<br>' +
+        '<b>日付:</b> ' + r.date + '<br>' +
+        '<b>時間:</b> ' + r.start_time + '〜' + r.end_time + '<br>' +
+        '<b>メール:</b> ' + (r.customer_email || '-') + '<br>' +
+        '<b>電話:</b> ' + (r.customer_phone || '-') + '</div>';
+      document.getElementById('detailContent').innerHTML = html;
+
+      // Populate time selects
+      populateTimeSelect('detChangeTime');
+      populateTimeSelect('detNextTime');
+      document.getElementById('detChangeDate').value = r.date;
+      document.getElementById('detChangeTime').value = r.start_time;
+
+      document.getElementById('detailModal').classList.add('show');
+    }
+
+    function populateTimeSelect(id) {
+      var sel = document.getElementById(id);
+      sel.innerHTML = '';
+      for (var m = 8*60+50; m <= 22*60+30; m += 10) {
+        var t = ('0'+Math.floor(m/60)).slice(-2) + ':' + ('0'+(m%60)).slice(-2);
+        sel.innerHTML += '<option value="' + t + '">' + t + '</option>';
+      }
+    }
+
+    function submitDetailChange() {
+      if (!currentDetailResv) return;
+      var newDate = document.getElementById('detChangeDate').value;
+      var newTime = document.getElementById('detChangeTime').value;
+      if (!newDate || !newTime) { alert('日付と時間を選択してください'); return; }
+      apiPost({
+        action: 'adminChangeReservation',
+        id: currentDetailResv.id,
+        new_date: newDate,
+        new_start_time: newTime,
+        skip_notify: true
+      }).then(function(data) {
+        if (data.error) { alert(data.error); return; }
+        alert('予約を変更しました');
+        closeModal('detailModal');
+        loadDashboard();
+      });
+    }
+
+    function submitNextBooking() {
+      if (!currentDetailResv) return;
+      var r = currentDetailResv;
+      var nextDate = document.getElementById('detNextDate').value;
+      var nextTime = document.getElementById('detNextTime').value;
+      if (!nextDate || !nextTime) { alert('日付と時間を選択してください'); return; }
+      apiPost({
+        action: 'adminCreateReservation',
+        customer_name: r.customer_name,
+        customer_email: r.customer_email || '',
+        customer_phone: r.customer_phone || '',
+        menu: r.menu,
+        date: nextDate,
+        start_time: nextTime,
+        skip_notify: true
+      }).then(function(data) {
+        if (data.error) { alert(data.error); return; }
+        alert('次回予約を作成しました');
+        closeModal('detailModal');
+        loadDashboard();
+      });
+    }
+
+    function cancelFromDetail() {
+      if (!currentDetailResv) return;
+      if (!confirm(currentDetailResv.customer_name + 'の予約をキャンセルしますか？\n（通知メールは送信されません）')) return;
+      apiPost({
+        action: 'adminCancelReservation',
+        id: currentDetailResv.id,
+        skip_notify: true
+      }).then(function(data) {
+        if (data.error) { alert(data.error); return; }
+        alert('キャンセルしました');
+        closeModal('detailModal');
+        loadDashboard();
       });
     }
 

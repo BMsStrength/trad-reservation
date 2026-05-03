@@ -187,157 +187,85 @@
       color: var(--white);
     }
 
-    /* ===== Calendar ===== */
-    .calendar-nav {
+    /* ===== 2-Week Slot Table (かんざし風) ===== */
+    .week-nav {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      margin: 24px 0 12px;
+      margin: 20px 0 8px;
     }
-    .calendar-month {
-      font-size: 16px;
-      font-weight: 700;
+    .week-nav-btn {
+      background: none; border: 1px solid var(--gray-300);
+      border-radius: var(--radius-sm); padding: 8px 14px;
+      cursor: pointer; font-size: 13px; color: var(--gray-700);
     }
-    .calendar-btn {
-      background: none;
-      border: 1px solid var(--gray-300);
-      border-radius: var(--radius-sm);
-      padding: 8px 12px;
-      cursor: pointer;
-      font-size: 14px;
-      color: var(--gray-700);
-      transition: all 0.15s;
-    }
-    .calendar-btn:hover { background: var(--gray-100); }
-    .calendar-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+    .week-nav-btn:hover { background: var(--gray-100); }
+    .week-nav-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+    .week-nav-label { font-size: 15px; font-weight: 700; }
 
-    .calendar-grid {
-      display: grid;
-      grid-template-columns: repeat(7, 1fr);
-      gap: 2px;
+    .slot-table-wrap {
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
       margin-bottom: 20px;
-    }
-    .calendar-weekday {
-      text-align: center;
-      font-size: 11px;
-      font-weight: 700;
-      color: var(--gray-500);
-      padding: 8px 0;
-    }
-    .calendar-weekday:first-child { color: var(--danger); }
-    .calendar-weekday:last-child { color: var(--brand-blue); }
-
-    .calendar-day {
-      aspect-ratio: 1;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 14px;
-      font-weight: 500;
-      border-radius: var(--radius-sm);
-      cursor: pointer;
-      transition: all 0.15s;
-      position: relative;
-    }
-    .calendar-day:hover:not(.disabled):not(.empty) { background: var(--brand-blue-pale); }
-    .calendar-day.selected {
-      background: var(--brand-blue);
-      color: var(--white);
-    }
-    .calendar-day.today {
-      font-weight: 700;
-    }
-    .calendar-day.today::after {
-      content: '';
-      position: absolute;
-      bottom: 4px;
-      width: 4px;
-      height: 4px;
-      border-radius: 50%;
-      background: var(--brand-blue);
-    }
-    .calendar-day.selected.today::after {
-      background: var(--white);
-    }
-    .calendar-day.disabled {
-      color: var(--gray-300);
-      cursor: not-allowed;
-      text-decoration: line-through;
-    }
-    .calendar-day.empty {
-      cursor: default;
-    }
-    .calendar-day.sunday { color: var(--danger); }
-    .calendar-day.saturday { color: var(--brand-blue); }
-    .calendar-day.disabled.sunday,
-    .calendar-day.disabled.saturday { color: var(--gray-300); }
-
-    /* ===== Time Slots ===== */
-    .slots-label {
-      font-size: 14px;
-      font-weight: 700;
-      margin-bottom: 12px;
-      color: var(--gray-800);
-    }
-    .slots-grid {
-      display: grid;
-      grid-template-columns: repeat(4, 1fr);
-      gap: 8px;
-      margin-bottom: 24px;
-    }
-    .slot {
-      padding: 12px 4px;
-      text-align: center;
-      border-radius: var(--radius-sm);
-      font-size: 13px;
-      font-weight: 500;
       border: 1px solid var(--gray-200);
-      cursor: pointer;
-      transition: all 0.15s;
-      background: var(--white);
+      border-radius: var(--radius-sm);
     }
-    .slot.available {
-      border-color: var(--success);
-      color: var(--success);
+    .slot-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+      min-width: 500px;
     }
-    .slot.available:hover {
-      background: #E8F5E9;
-    }
-    .slot.available .slot-icon { color: var(--success); }
-    .slot.unavailable {
-      background: var(--gray-100);
-      color: var(--gray-400);
-      cursor: not-allowed;
-      border-color: var(--gray-200);
-    }
-    .slot.selected {
-      background: var(--brand-blue);
-      color: var(--white);
-      border-color: var(--brand-blue);
-    }
-    .slot-time {
-      font-size: 14px;
+    .slot-table th {
+      background: var(--gray-50);
+      padding: 8px 2px;
+      text-align: center;
       font-weight: 700;
+      font-size: 12px;
+      border-bottom: 2px solid var(--gray-200);
+      position: sticky; top: 0; z-index: 2;
+      line-height: 1.4;
     }
-    .slot-icon {
-      font-size: 16px;
-      margin-top: 2px;
-    }
-    .slot.unavailable .slot-icon { color: var(--gray-400); }
-    .slot.selected .slot-icon { color: var(--white); }
+    .slot-table th.sun { color: var(--danger); }
+    .slot-table th.sat { color: var(--brand-blue); }
+    .slot-table th.tue { color: var(--gray-400); }
+    .slot-table th.today-col { background: var(--brand-blue-pale); }
 
-    .slots-loading {
+    .slot-table td {
       text-align: center;
-      padding: 40px;
-      color: var(--gray-500);
+      padding: 6px 2px;
+      border-bottom: 1px solid var(--gray-100);
+      border-right: 1px solid var(--gray-100);
+      min-width: 36px;
+      height: 32px;
     }
-    .slots-empty {
-      text-align: center;
-      padding: 32px;
-      color: var(--gray-500);
-      background: var(--gray-100);
-      border-radius: var(--radius);
-      font-size: 14px;
+    .slot-table td:first-child {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--gray-600);
+      background: var(--gray-50);
+      position: sticky; left: 0; z-index: 1;
+      min-width: 50px;
+      border-right: 2px solid var(--gray-200);
+    }
+    .slot-table td.today-col { background: rgba(227,242,253,0.25); }
+
+    .slot-mark {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 28px; height: 28px; border-radius: 50%;
+      font-size: 14px; font-weight: 700; cursor: pointer; transition: all 0.15s;
+    }
+    .slot-mark.avail { color: var(--success); }
+    .slot-mark.avail:hover { background: #E8F5E9; transform: scale(1.15); }
+    .slot-mark.taken { color: var(--gray-300); cursor: default; }
+    .slot-mark.closed { color: var(--gray-200); cursor: default; }
+    .slot-mark.selected {
+      background: var(--brand-blue); color: var(--white);
+      transform: scale(1.1); box-shadow: 0 2px 8px rgba(11,61,145,0.3);
+    }
+
+    .slot-table-loading {
+      text-align: center; padding: 40px; color: var(--gray-500);
     }
 
     /* ===== Form ===== */
@@ -549,21 +477,21 @@
       </div>
     </div>
 
-    <!-- ===== STEP 2: Date/Time Selection ===== -->
+    <!-- ===== STEP 2: Date/Time Selection (2-week table) ===== -->
     <div class="step-section" id="step2">
       <h2 class="section-title">日時を選択</h2>
 
-      <div class="calendar-nav">
-        <button class="calendar-btn" id="calPrev" onclick="changeMonth(-1)">‹ 前月</button>
-        <span class="calendar-month" id="calMonth"></span>
-        <button class="calendar-btn" id="calNext" onclick="changeMonth(1)">翌月 ›</button>
+      <div class="week-nav">
+        <button class="week-nav-btn" id="weekPrev" onclick="changeWeekPage(-1)">‹ 前の週へ</button>
+        <span class="week-nav-label" id="weekLabel"></span>
+        <button class="week-nav-btn" id="weekNext" onclick="changeWeekPage(1)">次の週へ ›</button>
       </div>
 
-      <div class="calendar-grid" id="calendarGrid"></div>
-
-      <div id="slotsContainer" style="display:none;">
-        <div class="slots-label" id="slotsLabel"></div>
-        <div id="slotsContent"></div>
+      <div id="slotTableArea">
+        <div class="slot-table-loading">
+          <div class="spinner" style="margin:0 auto;"></div>
+          <div style="margin-top:12px;">空き状況を読み込み中...</div>
+        </div>
       </div>
 
       <div class="btn-group">
@@ -648,11 +576,10 @@
       <p style="font-size:13px;color:var(--gray-600);text-align:center;margin-top:16px;">
         予約の変更・キャンセルは確認メールに記載のリンクから<br>前日23:59まで可能です。
       </p>
-      <div style="text-align:center;margin-top:24px;">
-  <button class="btn btn-primary" onclick="location.href='./?v=' + Date.now()">
-    予約サイトトップへ戻る
-  </button>
-</div>
+
+      <div style="margin-top:24px;">
+        <button class="btn btn-primary" onclick="location.reload()">予約サイトトップへ戻る</button>
+      </div>
     </div>
 
   </div>
@@ -667,47 +594,6 @@
     // ===== CONFIG =====
     // ★ デプロイ後にGASのWebアプリURLに書き換える
     var API_BASE = 'https://script.google.com/macros/s/AKfycbxzphUXhjAEwxFsj6napghnfRZh7R7p15L_iDfKwM9p56wdRrDsIbQrXzggFdqjgihY/exec';
-    function apiGet(action, params) {
-  params = params || {};
-  params.action = action;
-
-  return new Promise(function(resolve, reject) {
-    var callbackName = 'jsonp_cb_' + Date.now() + '_' + Math.floor(Math.random() * 100000);
-
-    params.callback = callbackName;
-
-    var query = Object.keys(params).map(function(key) {
-      return encodeURIComponent(key) + '=' + encodeURIComponent(params[key]);
-    }).join('&');
-
-    var script = document.createElement('script');
-    var timer = setTimeout(function() {
-      cleanup();
-      reject(new Error('timeout'));
-    }, 15000);
-
-    function cleanup() {
-      clearTimeout(timer);
-      delete window[callbackName];
-      if (script.parentNode) {
-        script.parentNode.removeChild(script);
-      }
-    }
-
-    window[callbackName] = function(data) {
-      cleanup();
-      resolve(data);
-    };
-
-    script.onerror = function() {
-      cleanup();
-      reject(new Error('jsonp error'));
-    };
-
-    script.src = API_BASE + '?' + query;
-    document.body.appendChild(script);
-  });
-}
 
     // ===== JSONP通信ヘルパー（GAS CORS回避） =====
     var _jsonpId = 0;
@@ -784,29 +670,19 @@
     });
 
     function loadSettings() {
-  showLoading('設定を読み込み中...');
-
-  apiGet('getSettings')
-    .then(function(data) {
-      hideLoading();
-
-      if (data.error) {
-        showError(data.error);
-        return;
-      }
-
-      state.menus = data.menus || [];
-      state.closedDay = data.closed_day;
-      state.bufferMin = data.buffer_min;
-      state.dailyMax = data.daily_max_reservations;
-
-      renderMenus();
-    })
-    .catch(function(err) {
-      hideLoading();
-      showError('接続エラーが発生しました。しばらくしてから再度お試しください。');
-    });
-}
+      showLoading('設定を読み込み中...');
+      gasGet({ action: 'getSettings' }, function(err, data) {
+        hideLoading();
+        if (err || !data) { showError('接続エラーが発生しました。しばらくしてから再度お試しください。'); return; }
+        if (data.error) { showError(data.error); return; }
+        state.menus = data.menus || [];
+        state.closedDay = data.closed_day;
+        state.bufferMin = data.buffer_min;
+        state.dailyMax = data.daily_max_reservations;
+        state.bookableUntil = data.bookable_until ? new Date(data.bookable_until + 'T23:59:59') : null;
+        renderMenus();
+      });
+    }
 
     // ===== MENU RENDERING =====
     function renderMenus() {
@@ -882,179 +758,197 @@
         if (s === step) ps.classList.add('active');
       });
 
-      if (step === 2) { renderCalendar(); loadClosures(); }
+      if (step === 2) { slotCache = {}; weekPage = 0; loadWeekTable(); }
       document.getElementById('progress').style.display = step === 5 ? 'none' : 'flex';
       window.scrollTo(0, 0);
     }
 
-    // ===== CALENDAR =====
-    function renderCalendar() {
-      var now = new Date();
-      var year = state.currentMonth.getFullYear();
-      var month = state.currentMonth.getMonth();
+    // ===== 2-WEEK TABLE =====
+    var weekPage = 0; // 0=今週〜来週, 1=来週〜再来週...
+    var slotCache = {}; // dateStr -> slots array
 
-      document.getElementById('calMonth').textContent = year + '年 ' + (month + 1) + '月';
+    function changeWeekPage(delta) {
+      weekPage += delta;
+      if (weekPage < 0) weekPage = 0;
+      loadWeekTable();
+    }
 
-      var thisMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-      var limitDate = state.bookableUntil || new Date(now.getFullYear(), now.getMonth() + 1, 0);
-      var maxMonthVal = new Date(limitDate.getFullYear(), limitDate.getMonth(), 1);
-      document.getElementById('calPrev').disabled = (year === thisMonth.getFullYear() && month === thisMonth.getMonth());
-      document.getElementById('calNext').disabled = (year === maxMonthVal.getFullYear() && month === maxMonthVal.getMonth());
-
-      var grid = document.getElementById('calendarGrid');
-      grid.innerHTML = '';
-
-      var weekdays = ['日','月','火','水','木','金','土'];
-      weekdays.forEach(function(w) {
-        var div = document.createElement('div');
-        div.className = 'calendar-weekday';
-        div.textContent = w;
-        grid.appendChild(div);
-      });
-
-      var firstDay = new Date(year, month, 1).getDay();
-      var daysInMonth = new Date(year, month + 1, 0).getDate();
-
+    function getWeekDates() {
       var today = new Date();
       today.setHours(0,0,0,0);
-      var maxDate = state.bookableUntil || new Date(today.getFullYear(), today.getMonth() + 1, 0);
+      var start = new Date(today);
+      start.setDate(start.getDate() + weekPage * 7);
+      var dates = [];
+      var limit = state.bookableUntil || new Date(today.getFullYear(), today.getMonth() + 2, 0);
+      for (var i = 0; i < 14; i++) {
+        var d = new Date(start);
+        d.setDate(start.getDate() + i);
+        if (d > limit) break;
+        dates.push(d);
+      }
+      return dates;
+    }
 
-      for (var e = 0; e < firstDay; e++) {
-        var emptyDiv = document.createElement('div');
-        emptyDiv.className = 'calendar-day empty';
-        grid.appendChild(emptyDiv);
+    function loadWeekTable() {
+      var dates = getWeekDates();
+      if (dates.length === 0) {
+        document.getElementById('slotTableArea').innerHTML = '<div class="slot-table-loading">予約可能な日がありません</div>';
+        return;
       }
 
-      for (var d = 1; d <= daysInMonth; d++) {
-        var date = new Date(year, month, d);
-        var dateStr = formatDateStr(date);
-        var dayDiv = document.createElement('div');
-        dayDiv.className = 'calendar-day';
-        dayDiv.textContent = d;
+      // Update label
+      var dayNames = ['日','月','火','水','木','金','土'];
+      var first = dates[0], last = dates[dates.length - 1];
+      document.getElementById('weekLabel').textContent =
+        (first.getMonth()+1) + '月';
 
-        if (date.getDay() === 0) dayDiv.classList.add('sunday');
-        if (date.getDay() === 6) dayDiv.classList.add('saturday');
-        if (date.getTime() === today.getTime()) dayDiv.classList.add('today');
+      // Prev disabled if weekPage=0
+      document.getElementById('weekPrev').disabled = (weekPage === 0);
 
-        var disabled = false;
-        if (date < today) disabled = true;
-        if (date > maxDate) disabled = true;
-        if (date.getDay() === state.closedDay) disabled = true;
-        if (state.closures[dateStr] && state.closures[dateStr].type === 'full_day') disabled = true;
+      // Show loading
+      document.getElementById('slotTableArea').innerHTML =
+        '<div class="slot-table-loading"><div class="spinner" style="margin:0 auto;"></div><div style="margin-top:12px;">空き状況を読み込み中...</div></div>';
 
-        if (disabled) {
-          dayDiv.classList.add('disabled');
-        } else {
-          dayDiv.dataset.date = dateStr;
-          dayDiv.onclick = function() { selectDate(this.dataset.date); };
+      // Load slots for all dates
+      var loaded = 0;
+      var total = dates.length;
+      var allSlots = {};
+
+      dates.forEach(function(d) {
+        var ds = formatDateStr(d);
+
+        // Check if closed day or past
+        var today = new Date(); today.setHours(0,0,0,0);
+        if (d < today || d.getDay() === state.closedDay) {
+          allSlots[ds] = { closed: true };
+          loaded++;
+          if (loaded === total) renderSlotTable(dates, allSlots);
+          return;
         }
 
-        if (state.selectedDate === dateStr) dayDiv.classList.add('selected');
-        grid.appendChild(dayDiv);
-      }
-    }
+        // Check cache
+        if (slotCache[ds]) {
+          allSlots[ds] = slotCache[ds];
+          loaded++;
+          if (loaded === total) renderSlotTable(dates, allSlots);
+          return;
+        }
 
-    function changeMonth(delta) {
-      state.currentMonth.setMonth(state.currentMonth.getMonth() + delta);
-      state.selectedDate = null;
-      state.selectedTime = null;
-      document.getElementById('slotsContainer').style.display = 'none';
-      document.getElementById('btnStep2Next').disabled = true;
-      renderCalendar();
-      loadClosures();
-    }
-
-    function selectDate(dateStr) {
-      state.selectedDate = dateStr;
-      state.selectedTime = null;
-      document.getElementById('btnStep2Next').disabled = true;
-      document.querySelectorAll('.calendar-day').forEach(function(d) {
-        d.classList.toggle('selected', d.dataset.date === dateStr);
-      });
-      loadSlots(dateStr);
-    }
-
-    function loadClosures() {
-  var year = state.currentMonth.getFullYear();
-  var month = ('0' + (state.currentMonth.getMonth() + 1)).slice(-2);
-  var monthStr = year + '-' + month;
-
-  apiGet('getClosures', { month: monthStr })
-    .then(function(data) {
-      if (data.success && data.closures) {
-        state.closures = {};
-        data.closures.forEach(function(c) {
-          state.closures[c.date] = c;
+        gasGet({ action: 'getSlots', date: ds, menu: state.selectedMenu }, function(err, data) {
+          if (err || !data || data.error || data.closed) {
+            allSlots[ds] = { closed: true, reason: (data && data.reason) || '' };
+          } else {
+            allSlots[ds] = { slots: data.slots || [] };
+            slotCache[ds] = allSlots[ds];
+          }
+          loaded++;
+          if (loaded === total) renderSlotTable(dates, allSlots);
         });
-        renderCalendar();
-      }
-    })
-    .catch(function() {
-      // 臨時休業の取得失敗は無視
-    });
-}
+      });
+    }
 
-    // ===== SLOTS =====
-    function loadSlots(dateStr) {
-  var container = document.getElementById('slotsContainer');
-  container.style.display = 'block';
+    function renderSlotTable(dates, allSlots) {
+      var dayNames = ['日','月','火','水','木','金','土'];
+      var todayStr = formatDateStr(new Date());
 
-  var dateObj = new Date(dateStr + 'T00:00:00');
-  var dayNames = ['日','月','火','水','木','金','土'];
+      // Collect all unique times across all dates
+      var timeSet = {};
+      dates.forEach(function(d) {
+        var ds = formatDateStr(d);
+        var info = allSlots[ds];
+        if (info && info.slots) {
+          info.slots.forEach(function(s) { timeSet[s.time] = true; });
+        }
+      });
+      var times = Object.keys(timeSet).sort();
 
-  document.getElementById('slotsLabel').textContent =
-    (dateObj.getMonth()+1) + '/' + dateObj.getDate() + '（' + dayNames[dateObj.getDay()] + '）の空き状況';
-
-  var content = document.getElementById('slotsContent');
-  content.innerHTML = '<div class="slots-loading"><div class="spinner" style="margin:0 auto;"></div><div style="margin-top:12px;">空き状況を確認中...</div></div>';
-
-  apiGet('getSlots', {
-    date: dateStr,
-    menu: state.selectedMenu
-  })
-    .then(function(data) {
-      if (data.error) {
-        content.innerHTML = '<div class="slots-empty">' + data.error + '</div>';
+      if (times.length === 0) {
+        document.getElementById('slotTableArea').innerHTML = '<div class="slot-table-loading">空き枠がありません</div>';
         return;
       }
 
-      if (data.closed) {
-        content.innerHTML = '<div class="slots-empty">' + (data.reason || 'この日は予約を受け付けておりません。') + '</div>';
-        return;
-      }
+      // Build table
+      var html = '<div class="slot-table-wrap"><table class="slot-table"><thead><tr><th>日時</th>';
+      dates.forEach(function(d) {
+        var ds = formatDateStr(d);
+        var dow = d.getDay();
+        var cls = '';
+        if (dow === 0) cls = 'sun';
+        if (dow === 6) cls = 'sat';
+        if (dow === 2) cls = 'tue';
+        if (ds === todayStr) cls += ' today-col';
+        html += '<th class="' + cls + '">' + d.getDate() + '<br><span style="font-size:10px;">(' + dayNames[dow] + ')</span></th>';
+      });
+      html += '</tr></thead><tbody>';
 
-      if (!data.slots || data.slots.length === 0) {
-        content.innerHTML = '<div class="slots-empty">空き枠がありません。</div>';
-        return;
-      }
+      times.forEach(function(time) {
+        html += '<tr><td>' + time + '</td>';
+        dates.forEach(function(d) {
+          var ds = formatDateStr(d);
+          var isToday = ds === todayStr;
+          var tdCls = isToday ? ' class="today-col"' : '';
+          var info = allSlots[ds];
 
-      var html = '<div class="slots-grid">';
+          if (!info || info.closed || d.getDay() === state.closedDay) {
+            html += '<td' + tdCls + '></td>';
+            return;
+          }
 
-      data.slots.forEach(function(slot) {
-        var cls = slot.available ? 'slot available' : 'slot unavailable';
-        var icon = slot.available ? '◯' : '✕';
-        var onclick = slot.available ? ' onclick="selectSlot(\'' + slot.time + '\')"' : '';
+          var slot = null;
+          if (info.slots) {
+            for (var i = 0; i < info.slots.length; i++) {
+              if (info.slots[i].time === time) { slot = info.slots[i]; break; }
+            }
+          }
 
-        html += '<div class="' + cls + '" data-time="' + slot.time + '"' + onclick + '>' +
-          '<div class="slot-time">' + slot.time + '</div>' +
-          '<div class="slot-icon">' + icon + '</div>' +
-        '</div>';
+          if (!slot) {
+            html += '<td' + tdCls + '></td>';
+          } else if (slot.available) {
+            var isSelected = (state.selectedDate === ds && state.selectedTime === time);
+            var markCls = isSelected ? 'slot-mark avail selected' : 'slot-mark avail';
+            html += '<td' + tdCls + '><span class="' + markCls + '" onclick="selectSlotCell(\'' + ds + '\',\'' + time + '\')">◯</span></td>';
+          } else {
+            html += '<td' + tdCls + '><span class="slot-mark taken">✕</span></td>';
+          }
+        });
+        html += '</tr>';
       });
 
-      html += '</div>';
-      content.innerHTML = html;
-    })
-    .catch(function() {
-      content.innerHTML = '<div class="slots-empty">接続エラーが発生しました。</div>';
-    });
-}
+      html += '</tbody></table></div>';
+      document.getElementById('slotTableArea').innerHTML = html;
+    }
+
+    function selectSlotCell(dateStr, time) {
+      state.selectedDate = dateStr;
+      state.selectedTime = time;
+      document.getElementById('btnStep2Next').disabled = false;
+
+      // Update visual selection
+      document.querySelectorAll('.slot-mark.selected').forEach(function(el) {
+        el.classList.remove('selected');
+      });
+      // Find and select the clicked one
+      document.querySelectorAll('.slot-mark.avail').forEach(function(el) {
+        if (el.onclick && el.onclick.toString().indexOf(dateStr) !== -1 && el.onclick.toString().indexOf(time) !== -1) {
+          el.classList.add('selected');
+        }
+      });
+
+      // Simpler: re-render to show selection
+      var dates = getWeekDates();
+      var allSlots = {};
+      dates.forEach(function(d) {
+        var ds = formatDateStr(d);
+        if (slotCache[ds]) allSlots[ds] = slotCache[ds];
+        else if (d.getDay() === state.closedDay || d < new Date(new Date().setHours(0,0,0,0))) allSlots[ds] = { closed: true };
+        else allSlots[ds] = { closed: true };
+      });
+      renderSlotTable(dates, allSlots);
+    }
 
     function selectSlot(time) {
-      state.selectedTime = time;
-      document.querySelectorAll('.slot').forEach(function(s) {
-        s.classList.toggle('selected', s.dataset.time === time);
-      });
-      document.getElementById('btnStep2Next').disabled = false;
+      // Legacy - keep for compatibility
+      selectSlotCell(state.selectedDate, time);
     }
 
     // ===== SUBMIT =====
