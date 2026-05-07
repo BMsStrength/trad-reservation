@@ -616,49 +616,55 @@
      */
     function gasGet(params, callback) {
       var cbName = '_gasCallback_' + (++_jsonpId);
+      var done = false;
       window[cbName] = function(data) {
+        if (done) return; done = true; clearTimeout(timer);
         delete window[cbName];
-        var script = document.getElementById(cbName);
-        if (script) script.remove();
+        var el = document.getElementById(cbName); if (el) el.remove();
         callback(null, data);
       };
       var qs = Object.keys(params).map(function(k) {
         return encodeURIComponent(k) + '=' + encodeURIComponent(params[k]);
       }).join('&');
-      var url = API_BASE + '?' + qs + '&callback=' + cbName;
       var script = document.createElement('script');
       script.id = cbName;
-      script.src = url;
+      script.src = API_BASE + '?' + qs + '&callback=' + cbName;
       script.onerror = function() {
-        delete window[cbName];
-        script.remove();
+        if (done) return; done = true; clearTimeout(timer);
+        delete window[cbName]; script.remove();
         callback(new Error('接続エラー'), null);
       };
+      var timer = setTimeout(function() {
+        if (done) return; done = true;
+        delete window[cbName]; var el = document.getElementById(cbName); if (el) el.remove();
+        callback(new Error('タイムアウト'), null);
+      }, 15000);
       document.body.appendChild(script);
     }
 
-    /**
-     * POST相当の処理をGET経由のJSONPで実行
-     * bodyをpayloadパラメータとして送る
-     */
     function gasPost(body, callback) {
       var cbName = '_gasCallback_' + (++_jsonpId);
+      var done = false;
       window[cbName] = function(data) {
+        if (done) return; done = true; clearTimeout(timer);
         delete window[cbName];
-        var script = document.getElementById(cbName);
-        if (script) script.remove();
+        var el = document.getElementById(cbName); if (el) el.remove();
         callback(null, data);
       };
       var payload = encodeURIComponent(JSON.stringify(body));
-      var url = API_BASE + '?payload=' + payload + '&callback=' + cbName;
       var script = document.createElement('script');
       script.id = cbName;
-      script.src = url;
+      script.src = API_BASE + '?payload=' + payload + '&callback=' + cbName;
       script.onerror = function() {
-        delete window[cbName];
-        script.remove();
+        if (done) return; done = true; clearTimeout(timer);
+        delete window[cbName]; script.remove();
         callback(new Error('接続エラー'), null);
       };
+      var timer = setTimeout(function() {
+        if (done) return; done = true;
+        delete window[cbName]; var el = document.getElementById(cbName); if (el) el.remove();
+        callback(new Error('タイムアウト'), null);
+      }, 15000);
       document.body.appendChild(script);
     }
 

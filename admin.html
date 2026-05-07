@@ -515,17 +515,48 @@
     var _jid = 0;
     function _jsonp(url, cb) {
       var n = '_gcb_' + (++_jid);
-      window[n] = function(d) { delete window[n]; document.getElementById(n).remove(); cb(d); };
+      var done = false;
+      window[n] = function(d) {
+        if (done) return;
+        done = true;
+        clearTimeout(timer);
+        delete window[n];
+        var el = document.getElementById(n);
+        if (el) el.remove();
+        cb(d);
+      };
       var s = document.createElement('script'); s.id = n; s.src = url + '&callback=' + n;
-      s.onerror = function() { delete window[n]; s.remove(); cb({error:'接続エラー'}); };
+      s.onerror = function() {
+        if (done) return;
+        done = true;
+        clearTimeout(timer);
+        delete window[n]; s.remove();
+        cb({error:'接続エラー'});
+      };
+      // 15秒タイムアウト
+      var timer = setTimeout(function() {
+        if (done) return;
+        done = true;
+        delete window[n];
+        var el = document.getElementById(n);
+        if (el) el.remove();
+        cb({error:'タイムアウト: サーバーの応答が遅いです。再度お試しください。'});
+      }, 15000);
       document.body.appendChild(s);
     }
 
     function doLogin() {
       var pw = document.getElementById('loginPassword').value;
       if (!pw) return;
+      var btn = document.querySelector('.login-btn');
+      btn.textContent = 'ログイン中...';
+      btn.disabled = true;
+      document.getElementById('loginError').style.display = 'none';
+
       var payload = encodeURIComponent(JSON.stringify({action:'adminLogin', password:pw}));
       _jsonp(API_BASE + '?payload=' + payload, function(data) {
+        btn.textContent = 'ログイン';
+        btn.disabled = false;
         if (data.error) {
           document.getElementById('loginError').textContent = data.error;
           document.getElementById('loginError').style.display = 'block';
@@ -645,22 +676,41 @@
       var label = (dates[0].getMonth()+1) + '/' + dates[0].getDate() + ' 〜 ' + (dates[6].getMonth()+1) + '/' + dates[6].getDate();
       document.getElementById('weekLabel').textContent = label;
 
+      // ローディング表示
+      var grid = document.getElementById('weekSchedule');
+      grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:60px 20px;color:var(--gray-500);">' +
+        '<div style="width:32px;height:32px;border:3px solid #eee;border-top-color:var(--brand-blue);border-radius:50%;animation:spin 0.8s linear infinite;margin:0 auto 12px;"></div>' +
+        '予約データを読み込んでいます...</div>';
+
       var startDate = fmtD(dates[0]);
       var todayStr = fmtD(new Date());
 
-      // 1回のAPIコールで1週間分を取得（高速）
-      apiGet('adminGetWeekReservations', '&start_date=' + startDate + '&days=7').then(function(data) {
-        if (data.error) { if(data.code===401) doLogout(); return; }
-        weekReservations = (data.reservations || []).map(function(r) {
-          // dayIdx を計算
-          for (var i = 0; i < dates.length; i++) {
-            if (fmtD(dates[i]) === r.date) { r._dayIdx = i; break; }
+      var retryCount = 0;
+      function fetchData() {
+        apiGet('adminGetWeekReservations', '&start_date=' + startDate + '&days=7').then(function(data) {
+          if (data.error) {
+            if (data.code === 401) { doLogout(); return; }
+            // リトライ（最大2回）
+            if (retryCount < 2) {
+              retryCount++;
+              grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--gray-500);">再試行中... (' + retryCount + '/2)</div>';
+              setTimeout(fetchData, 2000);
+              return;
+            }
+            grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--danger);">データの取得に失敗しました。ページを再読み込みしてください。</div>';
+            return;
           }
-          r._dateStr = r.date;
-          return r;
+          weekReservations = (data.reservations || []).map(function(r) {
+            for (var i = 0; i < dates.length; i++) {
+              if (fmtD(dates[i]) === r.date) { r._dayIdx = i; break; }
+            }
+            r._dateStr = r.date;
+            return r;
+          });
+          renderWeekSchedule(dates, todayStr);
         });
-        renderWeekSchedule(dates, todayStr);
-      });
+      }
+      fetchData();
     }
 
     function renderWeekSchedule(dates, todayStr) {
