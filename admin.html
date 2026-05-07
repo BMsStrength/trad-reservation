@@ -144,6 +144,7 @@
       <div>
         <span class="nav-brand">TRAD</span>
         <span class="nav-badge">管理</span>
+        <span class="nav-badge" id="todayBadge" style="background:#2E7D32;margin-left:4px;"></span>
       </div>
       <button class="nav-logout" onclick="doLogout()">ログアウト</button>
     </div>
@@ -155,6 +156,7 @@
       <div class="tab" data-tab="closures" onclick="switchTab('closures')">休業管理</div>
       <div class="tab" data-tab="blocks" onclick="switchTab('blocks')">ブロック</div>
       <div class="tab" data-tab="customers" onclick="switchTab('customers')">顧客</div>
+      <div class="tab" data-tab="report" onclick="switchTab('report')">レポート</div>
     </div>
 
     <div class="content">
@@ -214,11 +216,17 @@
         <div class="card">
           <div class="card-title">
             <span>予約一覧</span>
-            <div style="display:flex;gap:8px;">
-              <input class="form-input" type="date" id="filterDate" style="width:160px;padding:6px 10px;font-size:13px;" onchange="loadReservations()">
+            <div style="display:flex;gap:4px;flex-wrap:wrap;">
+              <button class="btn btn-outline btn-sm" onclick="filterResvQuick('today')">今日</button>
+              <button class="btn btn-outline btn-sm" onclick="filterResvQuick('week')">今週</button>
+              <button class="btn btn-outline btn-sm" onclick="filterResvQuick('month')">今月</button>
               <button class="btn btn-primary btn-sm" onclick="openCreateModal()">+ 新規</button>
               <button class="btn btn-outline btn-sm" onclick="openBulkModal()">一括作成</button>
             </div>
+          </div>
+          <div class="form-row" style="margin-bottom:8px;">
+            <div class="form-group" style="min-width:120px;"><label class="form-label">開始日</label><input class="form-input" type="date" id="filterDateFrom" style="padding:6px 10px;font-size:13px;" onchange="loadReservations()"></div>
+            <div class="form-group" style="min-width:120px;"><label class="form-label">終了日</label><input class="form-input" type="date" id="filterDateTo" style="padding:6px 10px;font-size:13px;" onchange="loadReservations()"></div>
           </div>
           <div class="table-wrap">
             <table>
@@ -303,10 +311,25 @@
           <div class="card-title">顧客一覧</div>
           <div class="table-wrap">
             <table>
-              <thead><tr><th>名前</th><th>メール</th><th>電話</th><th>メモ</th><th>登録日</th></tr></thead>
+              <thead><tr><th>名前</th><th>メール</th><th>電話</th><th>来店回数</th><th>最終来店</th><th>メモ</th></tr></thead>
               <tbody id="customerTableBody"></tbody>
             </table>
           </div>
+        </div>
+      </div>
+
+      <!-- Report Panel -->
+      <div class="panel" id="panel-report">
+        <div class="card">
+          <div class="card-title">
+            <span>月間レポート</span>
+            <div style="display:flex;gap:6px;align-items:center;">
+              <button class="btn btn-outline btn-sm" onclick="changeReportMonth(-1)">‹ 前月</button>
+              <span id="reportMonthLabel" style="font-size:14px;font-weight:700;"></span>
+              <button class="btn btn-outline btn-sm" onclick="changeReportMonth(1)">翌月 ›</button>
+            </div>
+          </div>
+          <div id="reportContent"></div>
         </div>
       </div>
     </div>
@@ -317,8 +340,9 @@
     <div class="modal">
       <div class="modal-title">新規予約（管理者）</div>
       <div class="form-row">
-        <div class="form-group"><label class="form-label">お客様名</label><input class="form-input" id="mName"></div>
+        <div class="form-group"><label class="form-label">お客様名</label><input class="form-input" id="mName" list="customerSuggest" oninput="autoFillCustomer('m')"></div>
       </div>
+      <datalist id="customerSuggest"></datalist>
       <div class="form-row">
         <div class="form-group"><label class="form-label">メール</label><input class="form-input" type="email" id="mEmail"></div>
         <div class="form-group"><label class="form-label">電話</label><input class="form-input" type="tel" id="mPhone"></div>
@@ -524,6 +548,42 @@
       document.getElementById('loginScreen').style.display='none';
       document.getElementById('adminApp').style.display='block';
       loadDashboard();
+      loadTodayBadge();
+      loadCustomerList(); // for autocomplete
+    }
+
+    var allCustomers = [];
+    function loadTodayBadge() {
+      apiGet('adminGetTodayCount').then(function(data) {
+        if (data.success) {
+          document.getElementById('todayBadge').textContent = '今日: ' + data.count + '件';
+        }
+      });
+    }
+    function loadCustomerList() {
+      apiGet('adminGetCustomerStats').then(function(data) {
+        if (!data.success) return;
+        allCustomers = data.customers || [];
+        var dl = document.getElementById('customerSuggest');
+        if (dl) {
+          dl.innerHTML = '';
+          allCustomers.forEach(function(c) {
+            dl.innerHTML += '<option value="' + escapeHtml(c.name) + '">';
+          });
+        }
+      });
+    }
+    function autoFillCustomer(prefix) {
+      var nameInput = document.getElementById(prefix + 'Name');
+      if (!nameInput) return;
+      var name = nameInput.value.trim();
+      var match = allCustomers.find(function(c) { return c.name === name; });
+      if (match) {
+        var emailField = document.getElementById(prefix + 'Email');
+        var phoneField = document.getElementById(prefix + 'Phone');
+        if (emailField && !emailField.value) emailField.value = match.email || '';
+        if (phoneField && !phoneField.value) phoneField.value = match.phone || '';
+      }
     }
 
     function switchTab(tab) {
@@ -535,6 +595,7 @@
       if (tab==='closures') loadClosures();
       if (tab==='blocks') loadBlocks();
       if (tab==='customers') loadCustomers();
+      if (tab==='report') loadReport();
     }
 
     function apiGet(action, extra) {
@@ -660,8 +721,11 @@
         ev.onclick = (function(resv) { return function() { openDetail(resv); }; })(r);
 
         cell0.style.position = 'relative';
+        ev._resvData = r;
         cell0.appendChild(ev);
       });
+      // Enable drag & drop
+      enableDragDrop();
     }
 
     // ===== DETAIL MODAL =====
@@ -765,31 +829,70 @@
     }
 
     // ===== RESERVATIONS =====
+    // ===== RESERVATIONS (improved filter) =====
+    function filterResvQuick(type) {
+      var today = new Date();
+      var from = document.getElementById('filterDateFrom');
+      var to = document.getElementById('filterDateTo');
+      if (type === 'today') {
+        from.value = fmtD(today);
+        to.value = fmtD(today);
+      } else if (type === 'week') {
+        var day = today.getDay();
+        var mon = new Date(today); mon.setDate(today.getDate() - ((day + 6) % 7));
+        var sun = new Date(mon); sun.setDate(mon.getDate() + 6);
+        from.value = fmtD(mon);
+        to.value = fmtD(sun);
+      } else if (type === 'month') {
+        var first = new Date(today.getFullYear(), today.getMonth(), 1);
+        var last = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+        from.value = fmtD(first);
+        to.value = fmtD(last);
+      }
+      loadReservations();
+    }
+
     function loadReservations() {
-      var dateFilter = document.getElementById('filterDate').value;
-      var extra = dateFilter ? '&date=' + dateFilter : '';
-      apiGet('adminGetReservations', extra).then(function(data){
-        if(data.error) return;
-        var tbody = document.getElementById('resvTableBody');
-        var rows = (data.reservations||[]);
-        if (rows.length===0) { tbody.innerHTML='<tr><td colspan="6" style="text-align:center;color:var(--gray-500);">予約がありません</td></tr>'; return; }
-        var html = '';
-        rows.forEach(function(r){
-          var badge = r.status==='confirmed' ? '<span class="badge badge-confirmed">確定</span>' : '<span class="badge badge-cancelled">取消</span>';
-          var actions = r.status==='confirmed' ?
-            '<button class="btn btn-danger btn-sm" onclick="cancelResv(\'' + r.id + '\')">取消</button>' : '';
-          html += '<tr><td>' + escapeHtml(r.date) + '</td><td>' + escapeHtml(fmtTimeSafe(r.start_time)) + '〜' + escapeHtml(fmtTimeSafe(r.end_time)) + '</td>' +
-            '<td>' + escapeHtml(r.customer_name) + '</td><td>' + escapeHtml(r.menu) + '</td><td>' + badge + '</td><td>' + actions + '</td></tr>';
-        });
-        tbody.innerHTML = html;
+      var dateFrom = document.getElementById('filterDateFrom').value;
+      var dateTo = document.getElementById('filterDateTo').value;
+      // Use week reservations API for range, or single date for backward compat
+      if (dateFrom && dateTo) {
+        var startD = new Date(dateFrom);
+        var endD = new Date(dateTo);
+        var days = Math.round((endD - startD) / (24*60*60*1000)) + 1;
+        if (days < 1) days = 1;
+        if (days > 60) days = 60;
+        apiGet('adminGetWeekReservations', '&start_date=' + dateFrom + '&days=' + days).then(renderResvTable);
+      } else if (dateFrom) {
+        apiGet('adminGetReservations', '&date=' + dateFrom).then(renderResvTable);
+      } else {
+        // Default: today
+        filterResvQuick('today');
+        return;
+      }
+    }
+
+    function renderResvTable(data) {
+      if (data.error) return;
+      var tbody = document.getElementById('resvTableBody');
+      var rows = (data.reservations || []);
+      if (rows.length === 0) { tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--gray-500);">予約がありません</td></tr>'; return; }
+      var html = '';
+      rows.forEach(function(r) {
+        var badge = r.status === 'confirmed' ? '<span class="badge badge-confirmed">確定</span>' : '<span class="badge badge-cancelled">取消</span>';
+        var actions = r.status === 'confirmed' ?
+          '<button class="btn btn-danger btn-sm" onclick="cancelResv(\'' + r.id + '\')">取消</button>' : '';
+        html += '<tr><td>' + escapeHtml(r.date) + '</td><td>' + escapeHtml(fmtTimeSafe(r.start_time)) + '〜' + escapeHtml(fmtTimeSafe(r.end_time)) + '</td>' +
+          '<td>' + escapeHtml(r.customer_name) + '</td><td>' + escapeHtml(r.menu) + '</td><td>' + badge + '</td><td>' + actions + '</td></tr>';
       });
+      tbody.innerHTML = html;
     }
 
     function cancelResv(id) {
       if (!confirm('この予約をキャンセルしますか？')) return;
       apiPost({action:'adminCancelReservation', id:id, skip_notify:true}).then(function(data){
         if(data.error) { alert(data.error); return; }
-        loadDashboard(); loadReservations();
+        loadDashboard(); loadReservations(); loadTodayBadge();
       });
     }
 
@@ -875,7 +978,8 @@
         var html='';
         uniqueRows.forEach(function(r){
           var badge = r.active ? '<span class="badge badge-active">有効</span>' : '<span class="badge badge-inactive">停止</span>';
-          var actions = r.active ? '<button class="btn btn-danger btn-sm" onclick="stopRecurring(\'' + r.series_id + '\')">停止</button>' : '';
+          var actions = r.active ? '<button class="btn btn-danger btn-sm" onclick="stopRecurring(\'' + r.series_id + '\')">停止</button> ' +
+            '<button class="btn btn-outline btn-sm" onclick="bulkCancelRecurring(\'' + r.series_id + '\',\'' + escapeHtml(r.customer_name).replace(/'/g,"\\'") + '\')">月一括取消</button>' : '';
           var info = escapeHtml(r.customer_name) + '　' + escapeHtml(dayNames[Number(r.day_of_week)] || '-') + '曜日　' + escapeHtml(fmtTimeSafe(r.start_time));
           html += '<tr><td>' + info + '</td><td>' + badge + '</td><td>' + actions + '</td></tr>';
         });
@@ -955,19 +1059,20 @@
       });
     }
 
-    // ===== CUSTOMERS =====
+    // ===== CUSTOMERS (with stats) =====
     function loadCustomers() {
-      apiGet('adminGetCustomers').then(function(data){
+      apiGet('adminGetCustomerStats').then(function(data){
         if(data.error) return;
         var tbody = document.getElementById('customerTableBody');
         var rows = data.customers||[];
-        if(rows.length===0){tbody.innerHTML='<tr><td colspan="5" style="text-align:center;color:var(--gray-500);">顧客がいません</td></tr>';return;}
+        if(rows.length===0){tbody.innerHTML='<tr><td colspan="6" style="text-align:center;color:var(--gray-500);">顧客がいません</td></tr>';return;}
         var html='';
         rows.forEach(function(c){
-          html += '<tr><td>' + c.name + '</td><td>' + (c.email||'-') + '</td><td>' + (c.phone||'-') + '</td>' +
-            '<td><input class="form-input" style="padding:4px 6px;font-size:11px;min-width:100px;" value="' + (c.notes||'').replace(/"/g,'&quot;') + '" ' +
-            'onchange="saveCustomerNotes(\'' + c.id + '\',this.value)" placeholder="メモ"></td>' +
-            '<td>' + (c.created_at||'-').slice(0,10) + '</td></tr>';
+          html += '<tr><td>' + escapeHtml(c.name) + '</td><td>' + escapeHtml(c.email||'-') + '</td><td>' + escapeHtml(c.phone||'-') + '</td>' +
+            '<td style="text-align:center;font-weight:700;">' + (c.visit_count || 0) + '回</td>' +
+            '<td>' + (c.last_visit || '-') + '</td>' +
+            '<td><input class="form-input" style="padding:4px 6px;font-size:11px;min-width:80px;" value="' + (c.notes||'').replace(/"/g,'&quot;') + '" ' +
+            'onchange="saveCustomerNotes(\'' + c.id + '\',this.value)" placeholder="メモ"></td></tr>';
         });
         tbody.innerHTML=html;
       });
@@ -976,6 +1081,133 @@
     function saveCustomerNotes(customerId, notes) {
       apiPost({ action: 'adminUpdateCustomerNotes', customer_id: customerId, notes: notes }).then(function(data) {
         if (data.error) alert(data.error);
+      });
+    }
+
+    // ===== REPORT =====
+    var reportMonthOffset = 0;
+    function changeReportMonth(delta) { reportMonthOffset += delta; loadReport(); }
+
+    function loadReport() {
+      var now = new Date();
+      var y = now.getFullYear();
+      var m = now.getMonth() + reportMonthOffset;
+      while (m < 0) { y--; m += 12; }
+      while (m > 11) { y++; m -= 12; }
+      var monthStr = y + '-' + ('0' + (m + 1)).slice(-2);
+      document.getElementById('reportMonthLabel').textContent = y + '年' + (m + 1) + '月';
+
+      apiGet('adminGetMonthlyReport', '&month=' + monthStr).then(function(data) {
+        if (data.error) { document.getElementById('reportContent').innerHTML = 'エラー'; return; }
+        var dayNames = ['日','月','火','水','木','金','土'];
+        var menuColors = {'パーソナルトレーニング':'#1565C0','ペアトレーニング':'#E65100','メンテナンス':'#2E7D32','無料体験':'#6A1B9A'};
+
+        var html = '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:20px;">';
+        html += '<div style="background:var(--brand-blue-pale);padding:16px;border-radius:8px;text-align:center;">' +
+          '<div style="font-size:28px;font-weight:900;color:var(--brand-blue);">' + data.total + '</div>' +
+          '<div style="font-size:12px;color:var(--gray-600);">総予約数</div></div>';
+
+        var menuKeys = Object.keys(data.by_menu || {});
+        if (menuKeys.length > 0) {
+          html += '<div style="background:#f5f5f5;padding:16px;border-radius:8px;">';
+          html += '<div style="font-size:12px;font-weight:700;margin-bottom:8px;">メニュー別</div>';
+          menuKeys.forEach(function(k) {
+            var color = menuColors[k] || '#666';
+            var pct = data.total ? Math.round(data.by_menu[k] / data.total * 100) : 0;
+            html += '<div style="font-size:11px;margin-bottom:4px;"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:' + color + ';margin-right:4px;"></span>' +
+              escapeHtml(k) + ': ' + data.by_menu[k] + '件 (' + pct + '%)</div>';
+          });
+          html += '</div>';
+        }
+
+        html += '<div style="background:#f5f5f5;padding:16px;border-radius:8px;">';
+        html += '<div style="font-size:12px;font-weight:700;margin-bottom:8px;">曜日別</div>';
+        for (var d = 0; d < 7; d++) {
+          var cnt = (data.by_day || {})[d] || 0;
+          var barW = data.total ? Math.round(cnt / data.total * 100) : 0;
+          html += '<div style="font-size:11px;display:flex;align-items:center;gap:4px;margin-bottom:2px;">' +
+            '<span style="width:16px;">' + dayNames[d] + '</span>' +
+            '<div style="flex:1;height:12px;background:#e0e0e0;border-radius:4px;overflow:hidden;">' +
+            '<div style="height:100%;width:' + barW + '%;background:var(--brand-blue);border-radius:4px;"></div></div>' +
+            '<span style="width:24px;text-align:right;">' + cnt + '</span></div>';
+        }
+        html += '</div></div>';
+
+        document.getElementById('reportContent').innerHTML = html;
+      });
+    }
+
+    // ===== BULK CANCEL RECURRING =====
+    function bulkCancelRecurring(seriesId, customerName) {
+      var targetMonth = prompt(escapeHtml(customerName) + ' の繰り返し予約をキャンセルする月を入力してください（例：2026-06）');
+      if (!targetMonth || !/^\d{4}-\d{2}$/.test(targetMonth)) return;
+      if (!confirm(targetMonth + ' の全予約をキャンセルしますか？')) return;
+      apiPost({ action: 'adminBulkCancelRecurring', series_id: seriesId, month: targetMonth }).then(function(data) {
+        if (data.error) { alert(data.error); return; }
+        alert(data.cancelled + '件をキャンセルしました。');
+        loadRecurring();
+        loadDashboard();
+      });
+    }
+
+    // ===== DRAG & DROP for schedule events =====
+    var dragData = null;
+
+    function enableDragDrop() {
+      var grid = document.getElementById('weekSchedule');
+      if (!grid) return;
+
+      // Make events draggable
+      grid.querySelectorAll('.sched-event').forEach(function(ev) {
+        ev.draggable = true;
+        ev.style.cursor = 'grab';
+        ev.addEventListener('dragstart', function(e) {
+          dragData = ev._resvData;
+          ev.style.opacity = '0.5';
+          e.dataTransfer.effectAllowed = 'move';
+        });
+        ev.addEventListener('dragend', function() {
+          ev.style.opacity = '1';
+          dragData = null;
+        });
+      });
+
+      // Make cells drop targets
+      grid.querySelectorAll('.sched-cell').forEach(function(cell) {
+        cell.addEventListener('dragover', function(e) {
+          e.preventDefault();
+          cell.style.background = 'rgba(21,101,192,0.1)';
+        });
+        cell.addEventListener('dragleave', function() {
+          cell.style.background = '';
+        });
+        cell.addEventListener('drop', function(e) {
+          e.preventDefault();
+          cell.style.background = '';
+          if (!dragData) return;
+          var dayIdx = parseInt(cell.dataset.day);
+          var hour = parseInt(cell.dataset.hour);
+          if (isNaN(dayIdx) || isNaN(hour)) return;
+
+          var dates = getWeekDates(weekOffset);
+          if (!dates[dayIdx]) return;
+          var newDate = fmtD(dates[dayIdx]);
+          var newTime = ('0' + hour).slice(-2) + ':00';
+
+          if (!confirm(dragData.customer_name + ' を ' + newDate + ' ' + newTime + ' に移動しますか？')) return;
+
+          apiPost({
+            action: 'adminChangeReservation',
+            id: dragData.id,
+            new_date: newDate,
+            new_start_time: newTime,
+            skip_notify: true
+          }).then(function(data) {
+            if (data.error) { alert(data.error); return; }
+            loadDashboard();
+            loadTodayBadge();
+          });
+        });
       });
     }
 
@@ -1003,14 +1235,13 @@
     }
 
     function submitBlock() {
-      var body = {
+      apiPost({
         action: 'adminCreateBlock',
         date: document.getElementById('blkDate').value,
         start_time: document.getElementById('blkStart').value,
         end_time: document.getElementById('blkEnd').value,
         reason: document.getElementById('blkReason').value
-      };
-      apiPost(body).then(function(data) {
+      }).then(function(data) {
         if (data.error) { alert(data.error); return; }
         closeModal('blockModal');
         loadBlocks();
