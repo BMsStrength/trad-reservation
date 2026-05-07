@@ -401,6 +401,27 @@
       margin-bottom: 24px;
     }
 
+    /* ===== Cart (予約カート) ===== */
+    .cart-bar {
+      position: fixed; bottom: 0; left: 0; right: 0;
+      background: var(--white); border-top: 2px solid var(--brand-blue);
+      box-shadow: 0 -4px 20px rgba(0,0,0,0.12);
+      max-width: 480px; margin: 0 auto; z-index: 80;
+      padding: 12px 16px; display: none;
+    }
+    .cart-bar.show { display: block; }
+    .cart-title { font-size: 14px; font-weight: 700; margin-bottom: 8px; display: flex; justify-content: space-between; }
+    .cart-item {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 8px 0; border-bottom: 1px solid var(--gray-100); font-size: 13px;
+    }
+    .cart-item:last-child { border-bottom: none; }
+    .cart-item-info { flex: 1; }
+    .cart-item-menu { font-size: 11px; color: var(--gray-500); }
+    .cart-remove { color: var(--danger); cursor: pointer; font-size: 18px; padding: 4px 8px; }
+    .cart-actions { display: flex; gap: 8px; margin-top: 10px; }
+    .cart-actions .btn { flex: 1; padding: 12px; font-size: 14px; }
+
     /* ===== Loading Overlay ===== */
     .loading-overlay {
       display: none;
@@ -481,9 +502,6 @@
     <div class="step-section active" id="step1">
       <h2 class="section-title">メニューを選択</h2>
       <div id="menuList"></div>
-      <div class="btn-group">
-        <button class="btn btn-primary" id="btnStep1Next" disabled onclick="goToStep(2)">次へ — 日時を選択</button>
-      </div>
     </div>
 
     <!-- ===== STEP 2: Date/Time Selection (2-week table) ===== -->
@@ -507,9 +525,8 @@
         </div>
       </div>
 
-      <div class="btn-group">
-        <button class="btn btn-primary" id="btnStep2Next" disabled onclick="goToStep(3)">次へ — 情報入力</button>
-        <button class="btn btn-secondary" onclick="goToStep(1)">戻る</button>
+      <div class="btn-group" id="step2Buttons" style="display:none;">
+        <button class="btn btn-secondary" onclick="goToStep(1)">メニュー選択に戻る</button>
       </div>
     </div>
 
@@ -540,27 +557,12 @@
     <div class="step-section" id="step4">
       <h2 class="section-title">ご予約内容の確認</h2>
 
+      <div id="confirmList"></div>
+
       <div class="confirm-card">
-        <div class="confirm-row">
-          <div class="confirm-label">メニュー</div>
-          <div class="confirm-value" id="confirmMenu"></div>
-        </div>
-        <div class="confirm-row">
-          <div class="confirm-label">日時</div>
-          <div class="confirm-value" id="confirmDateTime"></div>
-        </div>
-        <div class="confirm-row">
-          <div class="confirm-label">お名前</div>
-          <div class="confirm-value" id="confirmName"></div>
-        </div>
-        <div class="confirm-row">
-          <div class="confirm-label">メール</div>
-          <div class="confirm-value" id="confirmEmail"></div>
-        </div>
-        <div class="confirm-row">
-          <div class="confirm-label">電話番号</div>
-          <div class="confirm-value" id="confirmPhone"></div>
-        </div>
+        <div class="confirm-row"><div class="confirm-label">お名前</div><div class="confirm-value" id="confirmName"></div></div>
+        <div class="confirm-row"><div class="confirm-label">メール</div><div class="confirm-value" id="confirmEmail"></div></div>
+        <div class="confirm-row"><div class="confirm-label">電話番号</div><div class="confirm-value" id="confirmPhone"></div></div>
       </div>
 
       <div class="btn-group">
@@ -575,16 +577,7 @@
       <h2 class="complete-title">ご予約ありがとうございます</h2>
       <p class="complete-subtitle">確認メールをお送りしました。<br>メールが届かない場合はお問い合わせください。</p>
 
-      <div class="confirm-card">
-        <div class="confirm-row">
-          <div class="confirm-label">メニュー</div>
-          <div class="confirm-value" id="completeMenu"></div>
-        </div>
-        <div class="confirm-row">
-          <div class="confirm-label">日時</div>
-          <div class="confirm-value" id="completeDateTime"></div>
-        </div>
-      </div>
+      <div id="completeList"></div>
 
       <p style="font-size:13px;color:var(--gray-600);text-align:center;margin-top:16px;">
         予約の変更・キャンセルは確認メールに記載のリンクから<br>前日23:59まで可能です。
@@ -597,6 +590,16 @@
 
   </div>
 
+  <!-- Cart Bar (固定フッター) -->
+  <div class="cart-bar" id="cartBar">
+    <div class="cart-title"><span>🛒 予約カート（<span id="cartCount">0</span>件）</span></div>
+    <div id="cartItems"></div>
+    <div class="cart-actions">
+      <button class="btn btn-secondary" onclick="addMoreToCart()">+ もう1件追加</button>
+      <button class="btn btn-primary" onclick="goToStep(3)">予約に進む</button>
+    </div>
+  </div>
+
   <!-- Loading Overlay -->
   <div class="loading-overlay" id="loadingOverlay">
     <div class="spinner"></div>
@@ -604,509 +607,326 @@
   </div>
 
   <script>
-    // ===== CONFIG =====
-    // ★ デプロイ後にGASのWebアプリURLに書き換える
     var API_BASE = 'https://script.google.com/macros/s/AKfycbxzphUXhjAEwxFsj6napghnfRZh7R7p15L_iDfKwM9p56wdRrDsIbQrXzggFdqjgihY/exec';
 
-    // ===== JSONP通信ヘルパー（GAS CORS回避） =====
-    var _jsonpId = 0;
-    /**
-     * GAS APIをJSONP（scriptタグ挿入）で呼び出す
-     * GASのdoGetに callback パラメータを渡し、JSONP形式で返してもらう
-     */
-    function gasGet(params, callback) {
-      var cbName = '_gasCallback_' + (++_jsonpId);
-      var done = false;
-      window[cbName] = function(data) {
-        if (done) return; done = true; clearTimeout(timer);
-        delete window[cbName];
-        var el = document.getElementById(cbName); if (el) el.remove();
-        callback(null, data);
-      };
-      var qs = Object.keys(params).map(function(k) {
-        return encodeURIComponent(k) + '=' + encodeURIComponent(params[k]);
-      }).join('&');
-      var script = document.createElement('script');
-      script.id = cbName;
-      script.src = API_BASE + '?' + qs + '&callback=' + cbName;
-      script.onerror = function() {
-        if (done) return; done = true; clearTimeout(timer);
-        delete window[cbName]; script.remove();
-        callback(new Error('接続エラー'), null);
-      };
-      var timer = setTimeout(function() {
-        if (done) return; done = true;
-        delete window[cbName]; var el = document.getElementById(cbName); if (el) el.remove();
-        callback(new Error('タイムアウト'), null);
-      }, 15000);
-      document.body.appendChild(script);
+    // ===== JSONP with timeout =====
+    var _jid = 0;
+    function gasGet(params, cb) {
+      var n = '_gc_' + (++_jid), done = false;
+      window[n] = function(d) { if(done)return; done=true; clearTimeout(t); delete window[n]; var e=document.getElementById(n); if(e)e.remove(); cb(null,d); };
+      var qs = Object.keys(params).map(function(k){return encodeURIComponent(k)+'='+encodeURIComponent(params[k]);}).join('&');
+      var s = document.createElement('script'); s.id=n; s.src=API_BASE+'?'+qs+'&callback='+n;
+      s.onerror = function(){if(done)return;done=true;clearTimeout(t);delete window[n];s.remove();cb(new Error('err'));};
+      var t = setTimeout(function(){if(done)return;done=true;delete window[n];var e=document.getElementById(n);if(e)e.remove();cb(new Error('timeout'));},15000);
+      document.body.appendChild(s);
     }
-
-    function gasPost(body, callback) {
-      var cbName = '_gasCallback_' + (++_jsonpId);
-      var done = false;
-      window[cbName] = function(data) {
-        if (done) return; done = true; clearTimeout(timer);
-        delete window[cbName];
-        var el = document.getElementById(cbName); if (el) el.remove();
-        callback(null, data);
-      };
-      var payload = encodeURIComponent(JSON.stringify(body));
-      var script = document.createElement('script');
-      script.id = cbName;
-      script.src = API_BASE + '?payload=' + payload + '&callback=' + cbName;
-      script.onerror = function() {
-        if (done) return; done = true; clearTimeout(timer);
-        delete window[cbName]; script.remove();
-        callback(new Error('接続エラー'), null);
-      };
-      var timer = setTimeout(function() {
-        if (done) return; done = true;
-        delete window[cbName]; var el = document.getElementById(cbName); if (el) el.remove();
-        callback(new Error('タイムアウト'), null);
-      }, 15000);
-      document.body.appendChild(script);
+    function gasPost(body, cb) {
+      var n = '_gc_' + (++_jid), done = false;
+      window[n] = function(d) { if(done)return; done=true; clearTimeout(t); delete window[n]; var e=document.getElementById(n); if(e)e.remove(); cb(null,d); };
+      var s = document.createElement('script'); s.id=n; s.src=API_BASE+'?payload='+encodeURIComponent(JSON.stringify(body))+'&callback='+n;
+      s.onerror = function(){if(done)return;done=true;clearTimeout(t);delete window[n];s.remove();cb(new Error('err'));};
+      var t = setTimeout(function(){if(done)return;done=true;delete window[n];var e=document.getElementById(n);if(e)e.remove();cb(new Error('timeout'));},15000);
+      document.body.appendChild(s);
     }
 
     // ===== STATE =====
     var state = {
-      menus: [],
-      selectedMenu: null,
-      selectedDate: null,
-      selectedTime: null,
-      closedDays: [],
-      closures: {},
-      currentMonth: new Date(),
-      bufferMin: 10,
-      closedDay: 2,
-      dailyMax: 10,
-      bookableUntil: null
+      menus: [], selectedMenu: null, closedDay: 2, bufferMin: 10, dailyMax: 10, bookableUntil: null
     };
+    var cart = []; // [{menu, menuDuration, date, time}]
+    var slotCache = {};
+    var weekPage = 0;
+    var dayNames = ['日','月','火','水','木','金','土'];
 
-    // ===== INIT =====
+    // ===== INIT with localStorage cache =====
     document.addEventListener('DOMContentLoaded', function() {
+      // Try cached settings first (instant render)
+      var cached = null;
+      try { cached = JSON.parse(localStorage.getItem('trad_settings')); } catch(e) {}
+      if (cached && cached.menus && cached.menus.length) {
+        applySettings(cached);
+        renderMenus();
+      }
       loadSettings();
     });
+
+    function applySettings(data) {
+      state.menus = data.menus || [];
+      state.closedDay = data.closed_day;
+      state.bufferMin = data.buffer_min;
+      state.dailyMax = data.daily_max_reservations;
+      state.bookableUntil = data.bookable_until ? new Date(data.bookable_until + 'T23:59:59') : null;
+    }
 
     function loadSettings() {
       showLoading('設定を読み込み中...');
       gasGet({ action: 'getSettings' }, function(err, data) {
         hideLoading();
-        if (err || !data) { showError('接続エラーが発生しました。しばらくしてから再度お試しください。'); return; }
-        if (data.error) { showError(data.error); return; }
-        state.menus = data.menus || [];
-        state.closedDay = data.closed_day;
-        state.bufferMin = data.buffer_min;
-        state.dailyMax = data.daily_max_reservations;
-        state.bookableUntil = data.bookable_until ? new Date(data.bookable_until + 'T23:59:59') : null;
+        if (err || !data || data.error) {
+          if (!state.menus.length) showError('接続エラーが発生しました。再度お試しください。');
+          return;
+        }
+        applySettings(data);
+        try { localStorage.setItem('trad_settings', JSON.stringify(data)); } catch(e) {}
         renderMenus();
       });
     }
 
-    // ===== MENU RENDERING =====
+    // ===== MENU =====
     function renderMenus() {
-      var container = document.getElementById('menuList');
-      container.innerHTML = '';
-      state.menus.forEach(function(menu) {
+      var c = document.getElementById('menuList');
+      c.innerHTML = '';
+      state.menus.forEach(function(m) {
         var div = document.createElement('div');
-        div.className = 'menu-card';
-        div.onclick = function() { selectMenu(menu.name); };
-        div.innerHTML =
-          '<div>' +
-            '<div class="menu-name">' + menu.name + '</div>' +
-            '<div class="menu-duration">' + menu.duration + '分</div>' +
-          '</div>' +
-          '<div class="menu-check"><span style="display:none">✓</span></div>';
-        div.dataset.menu = menu.name;
-        container.appendChild(div);
+        div.className = 'menu-card' + (state.selectedMenu === m.name ? ' selected' : '');
+        div.onclick = function() { selectMenu(m.name); };
+        div.innerHTML = '<div><div class="menu-name">'+m.name+'</div><div class="menu-duration">'+m.duration+'分</div></div>' +
+          '<div class="menu-check"><span style="display:'+(state.selectedMenu===m.name?'inline':'none')+'">✓</span></div>';
+        div.dataset.menu = m.name;
+        c.appendChild(div);
       });
     }
 
     function selectMenu(name) {
       state.selectedMenu = name;
-      document.querySelectorAll('.menu-card').forEach(function(card) {
-        var isSelected = card.dataset.menu === name;
-        card.classList.toggle('selected', isSelected);
-        card.querySelector('.menu-check span').style.display = isSelected ? 'inline' : 'none';
-      });
-      document.getElementById('btnStep1Next').disabled = false;
+      renderMenus();
+      // Auto-advance to step 2
+      goToStep(2);
     }
 
     // ===== NAVIGATION =====
     function goToStep(step) {
-      if (step === 3 && !state.selectedTime) {
-        showError('時間を選択してください。');
-        return;
-      }
+      if (step === 3 && cart.length === 0) { showError('予約をカートに追加してください。'); return; }
       if (step === 4) {
         var name = document.getElementById('inputName').value.trim();
         var email = document.getElementById('inputEmail').value.trim();
         var phone = document.getElementById('inputPhone').value.trim();
-        if (!name || !email || !phone) {
-          showError('すべての項目を入力してください。');
-          return;
-        }
-        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-          showError('メールアドレスの形式が正しくありません。');
-          return;
-        }
-        var menuData = state.menus.find(function(m) { return m.name === state.selectedMenu; });
-        var dateObj = new Date(state.selectedDate + 'T00:00:00');
-        var dayNames = ['日','月','火','水','木','金','土'];
-        var dateStr = dateObj.getFullYear() + '年' +
-          (dateObj.getMonth()+1) + '月' + dateObj.getDate() + '日（' +
-          dayNames[dateObj.getDay()] + '）';
-        var startMin = timeToMin(state.selectedTime);
-        var endTime = minToTime(startMin + menuData.duration);
-
-        document.getElementById('confirmMenu').textContent = state.selectedMenu + '（' + menuData.duration + '分）';
-        document.getElementById('confirmDateTime').textContent = dateStr + ' ' + state.selectedTime + '〜' + endTime;
+        if (!name || !email || !phone) { showError('すべての項目を入力してください。'); return; }
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { showError('メールアドレスの形式が正しくありません。'); return; }
+        // Build confirmation
+        var html = '';
+        cart.forEach(function(item, idx) {
+          var d = new Date(item.date+'T00:00:00');
+          var endMin = timeToMin(item.time) + item.menuDuration;
+          html += '<div class="confirm-card" style="margin-bottom:8px;"><div class="confirm-row"><div class="confirm-label">予約'+(idx+1)+'</div><div class="confirm-value">'+
+            item.menu+'（'+item.menuDuration+'分）</div></div>'+
+            '<div class="confirm-row"><div class="confirm-label">日時</div><div class="confirm-value">'+
+            (d.getMonth()+1)+'/'+d.getDate()+'('+dayNames[d.getDay()]+') '+item.time+'〜'+minToTime(endMin)+'</div></div></div>';
+        });
+        document.getElementById('confirmList').innerHTML = html;
         document.getElementById('confirmName').textContent = name;
         document.getElementById('confirmEmail').textContent = email;
         document.getElementById('confirmPhone').textContent = phone;
       }
-
       clearError();
-      document.querySelectorAll('.step-section').forEach(function(s) { s.classList.remove('active'); });
-      document.getElementById('step' + step).classList.add('active');
-
-      document.querySelectorAll('.progress-step').forEach(function(ps) {
-        var s = parseInt(ps.dataset.step);
-        ps.classList.remove('active', 'done');
-        if (s < step) ps.classList.add('done');
-        if (s === step) ps.classList.add('active');
+      document.querySelectorAll('.step-section').forEach(function(s){s.classList.remove('active');});
+      document.getElementById('step'+step).classList.add('active');
+      document.querySelectorAll('.progress-step').forEach(function(ps){
+        var s=parseInt(ps.dataset.step); ps.classList.remove('active','done');
+        if(s<step)ps.classList.add('done'); if(s===step)ps.classList.add('active');
       });
-
       if (step === 2) {
         slotCache = {}; weekPage = 0;
-        var menuData2 = state.menus.find(function(m) { return m.name === state.selectedMenu; });
-        document.getElementById('step2MenuLabel').textContent = state.selectedMenu + '（' + (menuData2 ? menuData2.duration : '') + '分）';
+        document.getElementById('step2MenuLabel').textContent = state.selectedMenu +
+          '（' + (state.menus.find(function(m){return m.name===state.selectedMenu;})||{}).duration + '分）';
         loadWeekTable();
       }
-      document.getElementById('progress').style.display = step === 5 ? 'none' : 'flex';
-      window.scrollTo(0, 0);
+      // Show/hide cart bar
+      document.getElementById('cartBar').classList.toggle('show', step <= 2 && cart.length > 0);
+      document.getElementById('progress').style.display = step===5?'none':'flex';
+      window.scrollTo(0,0);
+    }
+
+    // ===== CART =====
+    function addToCart(date, time) {
+      var menuData = state.menus.find(function(m){return m.name===state.selectedMenu;});
+      if (!menuData) return;
+      // Duplicate check
+      for (var i=0;i<cart.length;i++) {
+        if (cart[i].date===date && cart[i].time===time) return;
+      }
+      cart.push({ menu: state.selectedMenu, menuDuration: menuData.duration, date: date, time: time });
+      renderCart();
+      // Clear slot cache for this date (mark as taken)
+      delete slotCache[date];
+    }
+
+    function removeFromCart(idx) {
+      var removed = cart.splice(idx, 1);
+      if (removed.length) delete slotCache[removed[0].date];
+      renderCart();
+      if (cart.length === 0) document.getElementById('cartBar').classList.remove('show');
+    }
+
+    function renderCart() {
+      document.getElementById('cartCount').textContent = cart.length;
+      var html = '';
+      cart.forEach(function(item, idx) {
+        var d = new Date(item.date+'T00:00:00');
+        html += '<div class="cart-item"><div class="cart-item-info">'+(d.getMonth()+1)+'/'+d.getDate()+'('+dayNames[d.getDay()]+') '+item.time+
+          '<div class="cart-item-menu">'+item.menu+'（'+item.menuDuration+'分）</div></div>'+
+          '<span class="cart-remove" onclick="removeFromCart('+idx+')">✕</span></div>';
+      });
+      document.getElementById('cartItems').innerHTML = html;
+      document.getElementById('cartBar').classList.toggle('show', cart.length > 0);
+    }
+
+    function addMoreToCart() {
+      goToStep(1);
     }
 
     // ===== 2-WEEK TABLE =====
-    var weekPage = 0; // 0=今週〜来週, 1=来週〜再来週...
-    var slotCache = {}; // dateStr -> slots array
-
-    function changeWeekPage(delta) {
-      weekPage += delta;
-      if (weekPage < 0) weekPage = 0;
-      loadWeekTable();
-    }
+    function changeWeekPage(d) { weekPage+=d; if(weekPage<0)weekPage=0; loadWeekTable(); }
 
     function getWeekDates() {
-      var today = new Date();
-      today.setHours(0,0,0,0);
-      var start = new Date(today);
-      start.setDate(start.getDate() + weekPage * 7);
-      var dates = [];
-      var limit = state.bookableUntil || new Date(today.getFullYear(), today.getMonth() + 2, 0);
-      for (var i = 0; i < 14; i++) {
-        var d = new Date(start);
-        d.setDate(start.getDate() + i);
-        if (d > limit) break;
-        dates.push(d);
-      }
+      var today=new Date(); today.setHours(0,0,0,0);
+      var start=new Date(today); start.setDate(start.getDate()+weekPage*7);
+      var dates=[];
+      var limit=state.bookableUntil||new Date(today.getFullYear(),today.getMonth()+2,0);
+      for(var i=0;i<14;i++){var d=new Date(start);d.setDate(start.getDate()+i);if(d>limit)break;dates.push(d);}
       return dates;
     }
 
     function loadWeekTable() {
-      var dates = getWeekDates();
-      if (dates.length === 0) {
-        document.getElementById('slotTableArea').innerHTML = '<div class="slot-table-loading">予約可能な日がありません</div>';
-        return;
-      }
+      var dates=getWeekDates();
+      if(!dates.length){document.getElementById('slotTableArea').innerHTML='<div style="text-align:center;padding:40px;color:var(--gray-500);">予約可能な日がありません</div>';return;}
+      document.getElementById('weekLabel').textContent=(dates[0].getMonth()+1)+'月';
+      document.getElementById('weekPrev').disabled=(weekPage===0);
+      document.getElementById('slotTableArea').innerHTML='<div style="text-align:center;padding:40px;color:var(--gray-500);"><div class="spinner" style="margin:0 auto;"></div><div style="margin-top:12px;">空き状況を確認中...</div></div>';
 
-      // Update label
-      var dayNames = ['日','月','火','水','木','金','土'];
-      var first = dates[0], last = dates[dates.length - 1];
-      document.getElementById('weekLabel').textContent =
-        (first.getMonth()+1) + '月';
+      var loaded=0, total=dates.length, allSlots={};
+      var today=new Date();today.setHours(0,0,0,0);
 
-      // Prev disabled if weekPage=0
-      document.getElementById('weekPrev').disabled = (weekPage === 0);
-
-      // Show loading
-      document.getElementById('slotTableArea').innerHTML =
-        '<div class="slot-table-loading"><div class="spinner" style="margin:0 auto;"></div><div style="margin-top:12px;">空き状況を読み込み中...</div></div>';
-
-      // Load slots for all dates
-      var loaded = 0;
-      var total = dates.length;
-      var allSlots = {};
-
-      dates.forEach(function(d) {
-        var ds = formatDateStr(d);
-
-        // Check if closed day or past
-        var today = new Date(); today.setHours(0,0,0,0);
-        if (d < today || d.getDay() === state.closedDay) {
-          allSlots[ds] = { closed: true };
-          loaded++;
-          if (loaded === total) renderSlotTable(dates, allSlots);
-          return;
-        }
-
-        // Check cache
-        if (slotCache[ds]) {
-          allSlots[ds] = slotCache[ds];
-          loaded++;
-          if (loaded === total) renderSlotTable(dates, allSlots);
-          return;
-        }
-
-        gasGet({ action: 'getSlots', date: ds, menu: state.selectedMenu }, function(err, data) {
-          if (err || !data || data.error || data.closed) {
-            allSlots[ds] = { closed: true, reason: (data && data.reason) || '' };
-          } else {
-            allSlots[ds] = { slots: data.slots || [] };
-            slotCache[ds] = allSlots[ds];
-          }
-          loaded++;
-          if (loaded === total) renderSlotTable(dates, allSlots);
+      dates.forEach(function(d){
+        var ds=fmtDate(d);
+        if(d<=today||d.getDay()===state.closedDay){allSlots[ds]={closed:true};loaded++;if(loaded===total)renderSlotTable(dates,allSlots);return;}
+        if(slotCache[ds]){allSlots[ds]=slotCache[ds];loaded++;if(loaded===total)renderSlotTable(dates,allSlots);return;}
+        gasGet({action:'getSlots',date:ds,menu:state.selectedMenu},function(err,data){
+          if(err||!data||data.error||data.closed){allSlots[ds]={closed:true};}
+          else{allSlots[ds]={slots:data.slots||[]};slotCache[ds]=allSlots[ds];}
+          loaded++;if(loaded===total)renderSlotTable(dates,allSlots);
         });
       });
     }
 
     function renderSlotTable(dates, allSlots) {
-      var dayNames = ['日','月','火','水','木','金','土'];
-      var today = new Date(); today.setHours(0,0,0,0);
-      var todayStr = formatDateStr(today);
+      var today=new Date();today.setHours(0,0,0,0);var todayStr=fmtDate(today);
+      var timeSet={};
+      dates.forEach(function(d){var ds=fmtDate(d);var info=allSlots[ds];if(info&&info.slots)info.slots.forEach(function(s){timeSet[s.time]=true;});});
+      var times=Object.keys(timeSet).sort();
+      if(!times.length){document.getElementById('slotTableArea').innerHTML='<div style="text-align:center;padding:40px;color:var(--gray-500);">空き枠がありません</div>';return;}
 
-      // Collect all unique times across all dates
-      var timeSet = {};
-      dates.forEach(function(d) {
-        var ds = formatDateStr(d);
-        var info = allSlots[ds];
-        if (info && info.slots) {
-          info.slots.forEach(function(s) { timeSet[s.time] = true; });
-        }
+      // Check which slots are already in cart
+      var cartSet={};
+      cart.forEach(function(c){cartSet[c.date+'|'+c.time]=true;});
+
+      var html='<div class="slot-table-wrap"><table class="slot-table"><thead><tr><th>日時</th>';
+      dates.forEach(function(d){
+        var ds=fmtDate(d),dow=d.getDay(),cls=[];
+        if(dow===0)cls.push('sun');if(dow===6)cls.push('sat');
+        if(dow===state.closedDay)cls.push('closed-col');if(d<=today)cls.push('past-col');
+        if(ds===todayStr)cls.push('today-col');
+        html+='<th class="'+cls.join(' ')+'">'+(d.getMonth()+1)+'/'+d.getDate()+'<br><span style="font-size:10px;">('+dayNames[dow]+')</span></th>';
       });
-      var times = Object.keys(timeSet).sort();
+      html+='</tr></thead><tbody>';
 
-      if (times.length === 0) {
-        document.getElementById('slotTableArea').innerHTML = '<div class="slot-table-loading">空き枠がありません</div>';
-        return;
-      }
-
-      // Build header
-      var html = '<div class="slot-table-wrap"><table class="slot-table"><thead><tr><th>日時</th>';
-      dates.forEach(function(d) {
-        var ds = formatDateStr(d);
-        var dow = d.getDay();
-        var clsList = [];
-        if (dow === 0) clsList.push('sun');
-        if (dow === 6) clsList.push('sat');
-        if (dow === state.closedDay) clsList.push('closed-col');
-        if (d <= today) clsList.push('past-col');
-        if (ds === todayStr) clsList.push('today-col');
-        html += '<th class="' + clsList.join(' ') + '">' +
-          (d.getMonth()+1) + '/' + d.getDate() + '<br><span style="font-size:10px;">(' + dayNames[dow] + ')</span></th>';
-      });
-      html += '</tr></thead><tbody>';
-
-      // Build rows
-      times.forEach(function(time) {
-        var mins = time.split(':');
-        var isFullHour = (parseInt(mins[1]) === 0);
-        var timeTd = isFullHour
-          ? '<td style="font-size:13px;font-weight:700;">' + time + '</td>'
-          : '<td>' + time + '</td>';
-        html += '<tr>' + timeTd;
-
-        dates.forEach(function(d) {
-          var ds = formatDateStr(d);
-          var dow = d.getDay();
-          var tdClasses = [];
-          if (ds === todayStr) tdClasses.push('today-col');
-          if (dow === state.closedDay) tdClasses.push('closed-col');
-          if (d <= today) tdClasses.push('past-col');
-          var tdCls = tdClasses.length ? ' class="' + tdClasses.join(' ') + '"' : '';
-
-          // Closed day or past date — show empty gray cell
-          if (dow === state.closedDay || d <= today) {
-            html += '<td' + tdCls + '></td>';
-            return;
-          }
-
-          var info = allSlots[ds];
-          if (!info || info.closed) {
-            html += '<td' + tdCls + '></td>';
-            return;
-          }
-
-          var slot = null;
-          if (info.slots) {
-            for (var i = 0; i < info.slots.length; i++) {
-              if (info.slots[i].time === time) { slot = info.slots[i]; break; }
-            }
-          }
-
-          if (!slot) {
-            html += '<td' + tdCls + '></td>';
-          } else if (slot.available) {
-            var isSelected = (state.selectedDate === ds && state.selectedTime === time);
-            var markCls = isSelected ? 'slot-mark avail selected' : 'slot-mark avail';
-            html += '<td' + tdCls + '><span class="' + markCls + '" onclick="selectSlotCell(\'' + ds + '\',\'' + time + '\')">◯</span></td>';
-          } else {
-            html += '<td' + tdCls + '><span class="slot-mark taken">✕</span></td>';
-          }
+      times.forEach(function(time){
+        var mins=time.split(':'),isFull=(parseInt(mins[1])===0);
+        html+='<tr><td'+(isFull?' style="font-size:13px;font-weight:700;"':'')+'>' +time+'</td>';
+        dates.forEach(function(d){
+          var ds=fmtDate(d),dow=d.getDay(),cls=[];
+          if(ds===todayStr)cls.push('today-col');if(dow===state.closedDay)cls.push('closed-col');if(d<=today)cls.push('past-col');
+          var tdCls=cls.length?' class="'+cls.join(' ')+'"':'';
+          if(dow===state.closedDay||d<=today){html+='<td'+tdCls+'></td>';return;}
+          var info=allSlots[ds];
+          if(!info||info.closed){html+='<td'+tdCls+'></td>';return;}
+          var slot=null;
+          if(info.slots)for(var i=0;i<info.slots.length;i++){if(info.slots[i].time===time){slot=info.slots[i];break;}}
+          if(!slot){html+='<td'+tdCls+'></td>';}
+          else if(cartSet[ds+'|'+time]){html+='<td'+tdCls+'><span class="slot-mark selected">✓</span></td>';}
+          else if(slot.available){html+='<td'+tdCls+'><span class="slot-mark avail" onclick="selectSlotCell(\''+ds+'\',\''+time+'\')">◯</span></td>';}
+          else{html+='<td'+tdCls+'><span class="slot-mark taken">✕</span></td>';}
         });
-        html += '</tr>';
+        html+='</tr>';
       });
-
-      html += '</tbody></table></div>';
-      document.getElementById('slotTableArea').innerHTML = html;
+      html+='</tbody></table></div>';
+      document.getElementById('slotTableArea').innerHTML=html;
     }
 
-    function selectSlotCell(dateStr, time) {
-      state.selectedDate = dateStr;
-      state.selectedTime = time;
-      document.getElementById('btnStep2Next').disabled = false;
-
-      // Update visual selection
-      document.querySelectorAll('.slot-mark.selected').forEach(function(el) {
-        el.classList.remove('selected');
-      });
-      // Find and select the clicked one
-      document.querySelectorAll('.slot-mark.avail').forEach(function(el) {
-        if (el.onclick && el.onclick.toString().indexOf(dateStr) !== -1 && el.onclick.toString().indexOf(time) !== -1) {
-          el.classList.add('selected');
-        }
-      });
-
-      // Simpler: re-render to show selection
-      var dates = getWeekDates();
-      var allSlots = {};
-      dates.forEach(function(d) {
-        var ds = formatDateStr(d);
-        if (slotCache[ds]) allSlots[ds] = slotCache[ds];
-        else if (d.getDay() === state.closedDay || d < new Date(new Date().setHours(0,0,0,0))) allSlots[ds] = { closed: true };
-        else allSlots[ds] = { closed: true };
+    function selectSlotCell(date, time) {
+      addToCart(date, time);
+      // Re-render table to show checkmark
+      var dates=getWeekDates();
+      var allSlots={};
+      dates.forEach(function(d){
+        var ds=fmtDate(d);
+        if(slotCache[ds])allSlots[ds]=slotCache[ds];
+        else allSlots[ds]={closed:true};
       });
       renderSlotTable(dates, allSlots);
     }
 
-    function selectSlot(time) {
-      // Legacy - keep for compatibility
-      selectSlotCell(state.selectedDate, time);
-    }
-
     // ===== SUBMIT =====
     function submitReservation() {
-      var menuData = state.menus.find(function(m) { return m.name === state.selectedMenu; });
-
-      showLoading('空き状況を再確認中...');
+      if (cart.length === 0) return;
+      showLoading('予約を確定しています（' + cart.length + '件）...');
       document.getElementById('btnSubmit').disabled = true;
 
-      // 楽観ロック: 確定前にもう一度空きを確認
-      gasGet({ action: 'getSlots', date: state.selectedDate, menu: state.selectedMenu }, function(err, slotData) {
-        if (err || !slotData) {
+      var name = document.getElementById('inputName').value.trim();
+      var email = document.getElementById('inputEmail').value.trim();
+      var phone = document.getElementById('inputPhone').value.trim();
+      var completed = 0, errors = [];
+
+      function submitNext(idx) {
+        if (idx >= cart.length) {
           hideLoading();
-          document.getElementById('btnSubmit').disabled = false;
-          showError('接続エラーが発生しました。');
-          return;
-        }
-
-        // 選択した枠がまだ空いているか確認
-        var stillAvail = false;
-        if (slotData.slots) {
-          for (var i = 0; i < slotData.slots.length; i++) {
-            if (slotData.slots[i].time === state.selectedTime && slotData.slots[i].available) {
-              stillAvail = true; break;
-            }
-          }
-        }
-        if (!stillAvail) {
-          hideLoading();
-          document.getElementById('btnSubmit').disabled = false;
-          showError('申し訳ございません。この枠はすでに予約が入りました。別の日時を選択してください。');
-          // キャッシュをクリアして再表示
-          slotCache = {};
-          goToStep(2);
-          return;
-        }
-
-        // 空いていたので予約実行
-        var body = {
-          action: 'createReservation',
-          customer_name: document.getElementById('inputName').value.trim(),
-          customer_email: document.getElementById('inputEmail').value.trim(),
-          customer_phone: document.getElementById('inputPhone').value.trim(),
-          menu: state.selectedMenu,
-          date: state.selectedDate,
-          start_time: state.selectedTime
-        };
-
-        document.getElementById('loadingText').textContent = '予約を確定しています...';
-
-        gasPost(body, function(err2, data) {
-          hideLoading();
-          if (err2 || !data) {
+          if (errors.length) {
             document.getElementById('btnSubmit').disabled = false;
-            showError('接続エラーが発生しました。しばらくしてから再度お試しください。');
+            showError(errors.join('\n'));
             return;
           }
-          if (data.error) {
-            document.getElementById('btnSubmit').disabled = false;
-            showError(data.error);
-            return;
-          }
-
-          var dateObj = new Date(state.selectedDate + 'T00:00:00');
-          var dayNames = ['日','月','火','水','木','金','土'];
-          var dateStr = dateObj.getFullYear() + '年' +
-            (dateObj.getMonth()+1) + '月' + dateObj.getDate() + '日（' +
-            dayNames[dateObj.getDay()] + '）';
-          var startMin = timeToMin(state.selectedTime);
-          var endTime = minToTime(startMin + menuData.duration);
-
-          document.getElementById('completeMenu').textContent = state.selectedMenu + '（' + menuData.duration + '分）';
-          document.getElementById('completeDateTime').textContent = dateStr + ' ' + state.selectedTime + '〜' + endTime;
-
+          // All success
+          var html = '';
+          cart.forEach(function(item) {
+            var d = new Date(item.date+'T00:00:00');
+            var endMin = timeToMin(item.time) + item.menuDuration;
+            html += '<div class="confirm-card" style="margin-bottom:8px;"><div class="confirm-row"><div class="confirm-label">メニュー</div><div class="confirm-value">'+
+              item.menu+'</div></div><div class="confirm-row"><div class="confirm-label">日時</div><div class="confirm-value">'+
+              (d.getMonth()+1)+'/'+d.getDate()+'('+dayNames[d.getDay()]+') '+item.time+'〜'+minToTime(endMin)+'</div></div></div>';
+          });
+          document.getElementById('completeList').innerHTML = html;
+          cart = [];
           goToStep(5);
+          return;
+        }
+
+        var item = cart[idx];
+        document.getElementById('loadingText').textContent = '予約を確定中 (' + (idx+1) + '/' + cart.length + ')...';
+
+        gasPost({
+          action: 'createReservation',
+          customer_name: name, customer_email: email, customer_phone: phone,
+          menu: item.menu, date: item.date, start_time: item.time
+        }, function(err, data) {
+          if (err || !data || data.error) {
+            errors.push((item.date + ' ' + item.time + ': ' + ((data && data.error) || '接続エラー')));
+          }
+          submitNext(idx + 1);
         });
-      });
+      }
+      submitNext(0);
     }
 
     // ===== UTILS =====
-    function formatDateStr(date) {
-      var y = date.getFullYear();
-      var m = ('0' + (date.getMonth() + 1)).slice(-2);
-      var d = ('0' + date.getDate()).slice(-2);
-      return y + '-' + m + '-' + d;
-    }
-    function timeToMin(t) {
-      var p = t.split(':');
-      return parseInt(p[0]) * 60 + parseInt(p[1]);
-    }
-    function minToTime(m) {
-      return ('0' + Math.floor(m/60)).slice(-2) + ':' + ('0' + (m%60)).slice(-2);
-    }
-    function showLoading(msg) {
-      document.getElementById('loadingText').textContent = msg || '読み込み中...';
-      document.getElementById('loadingOverlay').classList.add('show');
-    }
-    function hideLoading() {
-      document.getElementById('loadingOverlay').classList.remove('show');
-    }
-    function showError(msg) {
-      var el = document.getElementById('errorMsg');
-      el.textContent = msg;
-      el.classList.add('show');
-      window.scrollTo(0, 0);
-    }
-    function clearError() {
-      document.getElementById('errorMsg').classList.remove('show');
-    }
+    function fmtDate(d){return d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2)+'-'+('0'+d.getDate()).slice(-2);}
+    function timeToMin(t){var p=t.split(':');return parseInt(p[0])*60+parseInt(p[1]);}
+    function minToTime(m){return('0'+Math.floor(m/60)).slice(-2)+':'+('0'+(m%60)).slice(-2);}
+    function showLoading(msg){document.getElementById('loadingText').textContent=msg||'読み込み中...';document.getElementById('loadingOverlay').classList.add('show');}
+    function hideLoading(){document.getElementById('loadingOverlay').classList.remove('show');}
+    function showError(msg){var el=document.getElementById('errorMsg');el.textContent=msg;el.classList.add('show');window.scrollTo(0,0);}
+    function clearError(){document.getElementById('errorMsg').classList.remove('show');}
 
-    // PWA Service Worker
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('sw.js').catch(function() {});
-    }
+    if('serviceWorker' in navigator){navigator.serviceWorker.register('sw.js').catch(function(){});}
   </script>
 </body>
 </html>
