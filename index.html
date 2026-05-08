@@ -794,18 +794,31 @@
       document.getElementById('weekPrev').disabled=(weekPage===0);
       document.getElementById('slotTableArea').innerHTML='<div style="text-align:center;padding:40px;color:var(--gray-500);"><div class="spinner" style="margin:0 auto;"></div><div style="margin-top:12px;">空き状況を確認中...</div></div>';
 
-      var loaded=0, total=dates.length, allSlots={};
       var today=new Date();today.setHours(0,0,0,0);
+      var allSlots={};
+      var needFetch=false;
 
+      // キャッシュ済み・確定休日はAPIコール不要
       dates.forEach(function(d){
         var ds=fmtDate(d);
-        if(d<=today||d.getDay()===state.closedDay){allSlots[ds]={closed:true};loaded++;if(loaded===total)renderSlotTable(dates,allSlots);return;}
-        if(slotCache[ds]){allSlots[ds]=slotCache[ds];loaded++;if(loaded===total)renderSlotTable(dates,allSlots);return;}
-        gasGet({action:'getSlots',date:ds,menu:state.selectedMenu},function(err,data){
-          if(err||!data||data.error||data.closed){allSlots[ds]={closed:true};}
-          else{allSlots[ds]={slots:data.slots||[]};slotCache[ds]=allSlots[ds];}
-          loaded++;if(loaded===total)renderSlotTable(dates,allSlots);
+        if(d<=today||d.getDay()===state.closedDay){allSlots[ds]={closed:true};}
+        else if(slotCache[ds]){allSlots[ds]=slotCache[ds];}
+        else{needFetch=true;}
+      });
+
+      if(!needFetch){renderSlotTable(dates,allSlots);return;}
+
+      // バッチAPI: 1回のリクエストで全日分を取得
+      gasGet({action:'getWeekSlots',start_date:fmtDate(dates[0]),days:String(dates.length),menu:state.selectedMenu},function(err,data){
+        var dateData=(!err&&data&&data.dates)?data.dates:{};
+        dates.forEach(function(d){
+          var ds=fmtDate(d);
+          if(allSlots[ds])return;
+          var info=dateData[ds];
+          if(info&&!info.closed){allSlots[ds]={slots:info.slots||[]};slotCache[ds]=allSlots[ds];}
+          else{allSlots[ds]={closed:true};}
         });
+        renderSlotTable(dates,allSlots);
       });
     }
 

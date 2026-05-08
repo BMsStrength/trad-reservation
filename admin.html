@@ -157,6 +157,7 @@
       <div class="tab" data-tab="blocks" onclick="switchTab('blocks')">ブロック</div>
       <div class="tab" data-tab="customers" onclick="switchTab('customers')">顧客</div>
       <div class="tab" data-tab="report" onclick="switchTab('report')">レポート</div>
+      <div class="tab" data-tab="settings" onclick="switchTab('settings')">設定</div>
     </div>
 
     <div class="content">
@@ -227,6 +228,18 @@
           <div class="form-row" style="margin-bottom:8px;">
             <div class="form-group" style="min-width:120px;"><label class="form-label">開始日</label><input class="form-input" type="date" id="filterDateFrom" style="padding:6px 10px;font-size:13px;" onchange="loadReservations()"></div>
             <div class="form-group" style="min-width:120px;"><label class="form-label">終了日</label><input class="form-input" type="date" id="filterDateTo" style="padding:6px 10px;font-size:13px;" onchange="loadReservations()"></div>
+          </div>
+          <div class="form-row" style="margin-bottom:8px;">
+            <div class="form-group"><label class="form-label">お客様名で絞り込み</label><input class="form-input" type="text" id="filterName" placeholder="名前の一部を入力" style="padding:6px 10px;font-size:13px;" oninput="applyResvFilters()"></div>
+            <div class="form-group"><label class="form-label">メニュー</label>
+              <select class="form-select" id="filterMenu" style="padding:6px 10px;font-size:13px;" onchange="applyResvFilters()">
+                <option value="">すべて</option>
+                <option value="パーソナルトレーニング">パーソナルトレーニング</option>
+                <option value="ペアトレーニング">ペアトレーニング</option>
+                <option value="メンテナンス">メンテナンス</option>
+                <option value="無料体験">無料体験</option>
+              </select>
+            </div>
           </div>
           <div class="table-wrap">
             <table>
@@ -331,6 +344,57 @@
           </div>
           <div id="reportContent"></div>
         </div>
+      </div>
+
+      <!-- Settings Panel -->
+      <div class="panel" id="panel-settings">
+        <div class="card">
+          <div class="card-title">営業・システム設定</div>
+          <div class="form-row">
+            <div class="form-group" style="flex:2;"><label class="form-label">ジム名</label><input class="form-input" id="setGymName"></div>
+          </div>
+          <div class="form-row">
+            <div class="form-group"><label class="form-label">営業開始時間</label><input class="form-input" type="time" id="setBusinessStart"></div>
+            <div class="form-group"><label class="form-label">営業終了時間</label><input class="form-input" type="time" id="setBusinessEnd"></div>
+          </div>
+          <div class="form-row">
+            <div class="form-group"><label class="form-label">拡張開始（任意）</label><input class="form-input" type="time" id="setExtendedStart"></div>
+            <div class="form-group"><label class="form-label">拡張終了（任意）</label><input class="form-input" type="time" id="setExtendedEnd"></div>
+          </div>
+          <div class="form-row">
+            <div class="form-group"><label class="form-label">バッファ（分）</label><input class="form-input" type="number" id="setBuffer" min="0" max="60" style="max-width:120px;"></div>
+            <div class="form-group"><label class="form-label">1日の予約上限（件）</label><input class="form-input" type="number" id="setDailyMax" min="1" max="30" style="max-width:120px;"></div>
+            <div class="form-group"><label class="form-label">リマインド送信時刻（時）</label><input class="form-input" type="number" id="setRemindHour" min="0" max="23" style="max-width:120px;"></div>
+          </div>
+          <div class="form-row">
+            <div class="form-group"><label class="form-label">定休日</label>
+              <select class="form-select" id="setClosedDay" style="max-width:160px;">
+                <option value="0">日曜日</option>
+                <option value="1">月曜日</option>
+                <option value="2">火曜日</option>
+                <option value="3">水曜日</option>
+                <option value="4">木曜日</option>
+                <option value="5">金曜日</option>
+                <option value="6">土曜日</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group" style="flex:2;"><label class="form-label">トレーナーメールアドレス（朝サマリー・通知先）</label><input class="form-input" type="email" id="setTrainerEmail"></div>
+          </div>
+          <button class="btn btn-primary" onclick="saveSettings()" style="margin-top:4px;">設定を保存する</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Customer History Modal -->
+  <div class="modal-overlay" id="historyModal">
+    <div class="modal" style="max-width:560px;">
+      <div class="modal-title">予約履歴 — <span id="historyCustomerName"></span></div>
+      <div id="historyContent" style="max-height:420px;overflow-y:auto;"></div>
+      <div class="modal-footer">
+        <button class="btn btn-outline" onclick="closeModal('historyModal')">閉じる</button>
       </div>
     </div>
   </div>
@@ -627,6 +691,7 @@
       if (tab==='blocks') loadBlocks();
       if (tab==='customers') loadCustomers();
       if (tab==='report') loadReport();
+      if (tab==='settings') loadSettings();
     }
 
     function apiGet(action, extra) {
@@ -953,16 +1018,26 @@
       }
     }
 
+    var _resvData = [];
     function renderResvTable(data) {
       if (data.error) return;
+      _resvData = data.reservations || [];
+      applyResvFilters();
+    }
+    function applyResvFilters() {
+      var nameFilter = (document.getElementById('filterName') ? document.getElementById('filterName').value : '').trim();
+      var menuFilter = document.getElementById('filterMenu') ? document.getElementById('filterMenu').value : '';
+      var rows = _resvData.filter(function(r) {
+        if (nameFilter && String(r.customer_name || '').indexOf(nameFilter) === -1) return false;
+        if (menuFilter && r.menu !== menuFilter) return false;
+        return true;
+      });
       var tbody = document.getElementById('resvTableBody');
-      var rows = (data.reservations || []);
       if (rows.length === 0) { tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--gray-500);">予約がありません</td></tr>'; return; }
       var html = '';
       rows.forEach(function(r) {
         var badge = r.status === 'confirmed' ? '<span class="badge badge-confirmed">確定</span>' : '<span class="badge badge-cancelled">取消</span>';
-        var actions = r.status === 'confirmed' ?
-          '<button class="btn btn-danger btn-sm" onclick="cancelResv(\'' + r.id + '\')">取消</button>' : '';
+        var actions = r.status === 'confirmed' ? '<button class="btn btn-danger btn-sm" onclick="cancelResv(\'' + r.id + '\')">取消</button>' : '';
         html += '<tr><td>' + escapeHtml(r.date) + '</td><td>' + escapeHtml(fmtTimeSafe(r.start_time)) + '〜' + escapeHtml(fmtTimeSafe(r.end_time)) + '</td>' +
           '<td>' + escapeHtml(r.customer_name) + '</td><td>' + escapeHtml(r.menu) + '</td><td>' + badge + '</td><td>' + actions + '</td></tr>';
       });
@@ -1149,7 +1224,11 @@
         if(rows.length===0){tbody.innerHTML='<tr><td colspan="6" style="text-align:center;color:var(--gray-500);">顧客がいません</td></tr>';return;}
         var html='';
         rows.forEach(function(c){
-          html += '<tr><td>' + escapeHtml(c.name) + '</td><td>' + escapeHtml(c.email||'-') + '</td><td>' + escapeHtml(c.phone||'-') + '</td>' +
+          var safeName = escapeHtml(c.name);
+          var jsName = (c.name||'').replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+          html += '<tr>' +
+            '<td><span style="cursor:pointer;color:var(--brand-blue);text-decoration:underline;" onclick="showCustomerHistory(\'' + jsName + '\')" title="予約履歴を表示">' + safeName + '</span></td>' +
+            '<td>' + escapeHtml(c.email||'-') + '</td><td>' + escapeHtml(c.phone||'-') + '</td>' +
             '<td style="text-align:center;font-weight:700;">' + (c.visit_count || 0) + '回</td>' +
             '<td>' + (c.last_visit || '-') + '</td>' +
             '<td><input class="form-input" style="padding:4px 6px;font-size:11px;min-width:80px;" value="' + (c.notes||'').replace(/"/g,'&quot;') + '" ' +
@@ -1333,6 +1412,83 @@
       apiPost({ action: 'adminDeleteBlock', id: id }).then(function(data) {
         if (data.error) { alert(data.error); return; }
         loadBlocks();
+      });
+    }
+
+    // ===== SETTINGS TAB =====
+    function loadSettings() {
+      apiGet('adminGetSettings').then(function(data) {
+        if (!data.success) { alert('設定の取得に失敗しました。'); return; }
+        var s = data.settings;
+        document.getElementById('setGymName').value        = s.gym_name || '';
+        document.getElementById('setBusinessStart').value  = s.business_start || '09:00';
+        document.getElementById('setBusinessEnd').value    = s.business_end || '22:00';
+        document.getElementById('setExtendedStart').value  = s.extended_start || '08:50';
+        document.getElementById('setExtendedEnd').value    = s.extended_end || '22:30';
+        document.getElementById('setBuffer').value         = s.buffer_min || '10';
+        document.getElementById('setDailyMax').value       = s.daily_max_reservations || '10';
+        document.getElementById('setRemindHour').value     = s.remind_hour || '18';
+        document.getElementById('setClosedDay').value      = s.closed_day || '2';
+        document.getElementById('setTrainerEmail').value   = s.trainer_email || '';
+      });
+    }
+    function saveSettings() {
+      var settings = {
+        gym_name:               document.getElementById('setGymName').value,
+        business_start:         document.getElementById('setBusinessStart').value,
+        business_end:           document.getElementById('setBusinessEnd').value,
+        extended_start:         document.getElementById('setExtendedStart').value,
+        extended_end:           document.getElementById('setExtendedEnd').value,
+        buffer_min:             document.getElementById('setBuffer').value,
+        daily_max_reservations: document.getElementById('setDailyMax').value,
+        remind_hour:            document.getElementById('setRemindHour').value,
+        closed_day:             document.getElementById('setClosedDay').value,
+        trainer_email:          document.getElementById('setTrainerEmail').value
+      };
+      apiPost({ action: 'adminUpdateSettings', settings: settings }).then(function(data) {
+        if (data.error) { alert('保存エラー: ' + data.error); return; }
+        alert('設定を保存しました。');
+      });
+    }
+
+    // ===== CUSTOMER HISTORY MODAL =====
+    function showCustomerHistory(name) {
+      document.getElementById('historyCustomerName').textContent = name;
+      document.getElementById('historyContent').innerHTML =
+        '<div style="text-align:center;padding:24px;color:var(--gray-500);">読み込み中...</div>';
+      document.getElementById('historyModal').classList.add('show');
+      apiGet('adminGetReservations', '&customer_name=' + encodeURIComponent(name)).then(function(data) {
+        if (data.error) {
+          document.getElementById('historyContent').innerHTML = '<div style="color:var(--danger);padding:16px;">データの取得に失敗しました。</div>';
+          return;
+        }
+        var rows = (data.reservations || []);
+        if (rows.length === 0) {
+          document.getElementById('historyContent').innerHTML = '<div style="text-align:center;padding:24px;color:var(--gray-500);">予約履歴がありません</div>';
+          return;
+        }
+        var menuColors = {'パーソナルトレーニング':'#1565C0','ペアトレーニング':'#E65100','メンテナンス':'#2E7D32','無料体験':'#6A1B9A'};
+        var html = '<table style="width:100%;border-collapse:collapse;font-size:13px;">' +
+          '<thead><tr>' +
+          '<th style="text-align:left;padding:8px 10px;background:#f5f5f5;border-bottom:2px solid #e0e0e0;">日付</th>' +
+          '<th style="text-align:left;padding:8px 10px;background:#f5f5f5;border-bottom:2px solid #e0e0e0;">時間</th>' +
+          '<th style="text-align:left;padding:8px 10px;background:#f5f5f5;border-bottom:2px solid #e0e0e0;">メニュー</th>' +
+          '<th style="text-align:left;padding:8px 10px;background:#f5f5f5;border-bottom:2px solid #e0e0e0;">状態</th>' +
+          '</tr></thead><tbody>';
+        rows.forEach(function(r) {
+          var badge = r.status === 'confirmed'
+            ? '<span class="badge badge-confirmed">確定</span>'
+            : '<span class="badge badge-cancelled">取消</span>';
+          var menuColor = menuColors[r.menu] || '#666';
+          html += '<tr>' +
+            '<td style="padding:8px 10px;border-bottom:1px solid #f5f5f5;">' + escapeHtml(r.date) + '</td>' +
+            '<td style="padding:8px 10px;border-bottom:1px solid #f5f5f5;">' + escapeHtml(fmtTimeSafe(r.start_time)) + '〜' + escapeHtml(fmtTimeSafe(r.end_time)) + '</td>' +
+            '<td style="padding:8px 10px;border-bottom:1px solid #f5f5f5;color:' + menuColor + ';font-weight:600;">' + escapeHtml(r.menu) + '</td>' +
+            '<td style="padding:8px 10px;border-bottom:1px solid #f5f5f5;">' + badge + '</td>' +
+            '</tr>';
+        });
+        html += '</tbody></table>';
+        document.getElementById('historyContent').innerHTML = html;
       });
     }
   </script>
