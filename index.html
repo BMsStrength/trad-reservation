@@ -617,7 +617,7 @@
       var qs = Object.keys(params).map(function(k){return encodeURIComponent(k)+'='+encodeURIComponent(params[k]);}).join('&');
       var s = document.createElement('script'); s.id=n; s.src=API_BASE+'?'+qs+'&callback='+n;
       s.onerror = function(){if(done)return;done=true;clearTimeout(t);delete window[n];s.remove();cb(new Error('err'));};
-      var t = setTimeout(function(){if(done)return;done=true;delete window[n];var e=document.getElementById(n);if(e)e.remove();cb(new Error('timeout'));},15000);
+      var t = setTimeout(function(){if(done)return;done=true;delete window[n];var e=document.getElementById(n);if(e)e.remove();cb(new Error('timeout'));},8000);
       document.body.appendChild(s);
     }
     function gasPost(body, cb) {
@@ -625,7 +625,7 @@
       window[n] = function(d) { if(done)return; done=true; clearTimeout(t); delete window[n]; var e=document.getElementById(n); if(e)e.remove(); cb(null,d); };
       var s = document.createElement('script'); s.id=n; s.src=API_BASE+'?payload='+encodeURIComponent(JSON.stringify(body))+'&callback='+n;
       s.onerror = function(){if(done)return;done=true;clearTimeout(t);delete window[n];s.remove();cb(new Error('err'));};
-      var t = setTimeout(function(){if(done)return;done=true;delete window[n];var e=document.getElementById(n);if(e)e.remove();cb(new Error('timeout'));},15000);
+      var t = setTimeout(function(){if(done)return;done=true;delete window[n];var e=document.getElementById(n);if(e)e.remove();cb(new Error('timeout'));},8000);
       document.body.appendChild(s);
     }
 
@@ -636,18 +636,34 @@
     var cart = []; // [{menu, menuDuration, date, time}]
     var slotCache = {};
     var weekPage = 0;
+    var lastSlotCacheMenu = null; // スロットキャッシュが有効なメニュー名
     var dayNames = ['日','月','火','水','木','金','土'];
 
     // ===== INIT with localStorage cache =====
+    var SETTINGS_TTL = 30 * 60 * 1000; // 設定キャッシュの有効期限: 30分
+
     document.addEventListener('DOMContentLoaded', function() {
-      // Try cached settings first (instant render)
       var cached = null;
-      try { cached = JSON.parse(localStorage.getItem('trad_settings')); } catch(e) {}
-      if (cached && cached.menus && cached.menus.length) {
+      try {
+        var raw = localStorage.getItem('trad_settings');
+        if (raw) {
+          var parsed = JSON.parse(raw);
+          // 30分以内のキャッシュのみ有効
+          if (parsed && parsed.menus && parsed._ts && Date.now() - parsed._ts < SETTINGS_TTL) {
+            cached = parsed;
+          }
+        }
+      } catch(e) {}
+
+      if (cached && cached.menus.length) {
+        // キャッシュがあれば即座に表示してバックグラウンドで更新（ローディング非表示）
         applySettings(cached);
         renderMenus();
+        loadSettings(true);
+      } else {
+        // キャッシュなし・期限切れはローディングを表示して取得
+        loadSettings(false);
       }
-      loadSettings();
     });
 
     function applySettings(data) {
@@ -658,16 +674,19 @@
       state.bookableUntil = data.bookable_until ? new Date(data.bookable_until + 'T23:59:59') : null;
     }
 
-    function loadSettings() {
-      showLoading('設定を読み込み中...');
+    function loadSettings(silent) {
+      if (!silent) showLoading('設定を読み込み中...');
       gasGet({ action: 'getSettings' }, function(err, data) {
-        hideLoading();
+        if (!silent) hideLoading();
         if (err || !data || data.error) {
           if (!state.menus.length) showError('接続エラーが発生しました。再度お試しください。');
           return;
         }
         applySettings(data);
-        try { localStorage.setItem('trad_settings', JSON.stringify(data)); } catch(e) {}
+        try {
+          data._ts = Date.now(); // TTL用タイムスタンプを付与して保存
+          localStorage.setItem('trad_settings', JSON.stringify(data));
+        } catch(e) {}
         renderMenus();
       });
     }
@@ -688,9 +707,14 @@
     }
 
     function selectMenu(name) {
+      if (state.selectedMenu !== name) {
+        // メニューが変わった時だけスロットキャッシュをクリア
+        slotCache = {};
+        weekPage = 0;
+        lastSlotCacheMenu = null;
+      }
       state.selectedMenu = name;
       renderMenus();
-      // Auto-advance to step 2
       goToStep(2);
     }
 
@@ -726,7 +750,7 @@
         if(s<step)ps.classList.add('done'); if(s===step)ps.classList.add('active');
       });
       if (step === 2) {
-        slotCache = {}; weekPage = 0;
+        // スロットキャッシュはselectMenu()でメニュー変更時のみクリア（ここではクリアしない）
         document.getElementById('step2MenuLabel').textContent = state.selectedMenu +
           '（' + (state.menus.find(function(m){return m.name===state.selectedMenu;})||{}).duration + '分）';
         loadWeekTable();
