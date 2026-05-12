@@ -3,6 +3,9 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
   <title>管理画面 | TRAD</title>
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
   <style>
@@ -677,6 +680,8 @@
 
   <script>
     var API_BASE = 'https://script.google.com/macros/s/AKfycbxzphUXhjAEwxFsj6napghnfRZh7R7p15L_iDfKwM9p56wdRrDsIbQrXzggFdqjgihY/exec';
+    var API_TIMEOUT_MS = 25000;
+    var API_RETRY_MAX = 2;
     var adminToken = localStorage.getItem('trad_admin_token') || '';
     var dayNames = ['日','月','火','水','木','金','土'];
 
@@ -717,37 +722,51 @@
       showAdmin();
     }
 
-    // JSONP helpers
+    // JSONP helpers with timeout/retry/cache-busting
     var _jid = 0;
-    function _jsonp(url, cb) {
-      var n = '_gcb_' + (++_jid);
+    function addApiParams(url, params) {
+      var sep = url.indexOf('?') === -1 ? '?' : '&';
+      var q = Object.keys(params || {}).map(function(k) {
+        return encodeURIComponent(k) + '=' + encodeURIComponent(params[k]);
+      }).join('&');
+      return url + sep + q;
+    }
+    function cleanupJsonp(name, timer) {
+      if (timer) clearTimeout(timer);
+      try { delete window[name]; } catch(e) { window[name] = undefined; }
+      var el = document.getElementById(name);
+      if (el && el.parentNode) el.parentNode.removeChild(el);
+    }
+    function _jsonp(url, cb, attempt) {
+      attempt = attempt || 0;
+      var n = '_gcb_' + (++_jid) + '_' + Math.floor(Math.random() * 1000000);
       var done = false;
-      window[n] = function(d) {
+      var timer = null;
+      function finish(data, shouldRetry) {
         if (done) return;
         done = true;
-        clearTimeout(timer);
-        delete window[n];
-        var el = document.getElementById(n);
-        if (el) el.remove();
-        cb(d);
-      };
-      var s = document.createElement('script'); s.id = n; s.src = url + '&callback=' + n;
-      s.onerror = function() {
-        if (done) return;
-        done = true;
-        clearTimeout(timer);
-        delete window[n]; s.remove();
-        cb({error:'接続エラー'});
-      };
-      // 15秒タイムアウト
-      var timer = setTimeout(function() {
-        if (done) return;
-        done = true;
-        delete window[n];
-        var el = document.getElementById(n);
-        if (el) el.remove();
-        cb({error:'タイムアウト: サーバーの応答が遅いです。再度お試しください。'});
-      }, 15000);
+        cleanupJsonp(n, timer);
+        if (shouldRetry && attempt < API_RETRY_MAX) {
+          setTimeout(function() { _jsonp(url, cb, attempt + 1); }, 800 * (attempt + 1));
+          return;
+        }
+        cb(data);
+      }
+      window[n] = function(d) { finish(d, false); };
+      var finalUrl = addApiParams(url, {
+        authuser: '0',
+        _: Date.now() + '_' + Math.floor(Math.random() * 1000000),
+        callback: n
+      });
+      var s = document.createElement('script');
+      s.id = n;
+      s.async = true;
+      s.referrerPolicy = 'no-referrer';
+      s.src = finalUrl;
+      s.onerror = function() { finish({error:'接続エラー'}, true); };
+      timer = setTimeout(function() {
+        finish({error:'タイムアウト: サーバーの応答が遅いです。再度お試しください。'}, true);
+      }, API_TIMEOUT_MS);
       document.body.appendChild(s);
     }
 

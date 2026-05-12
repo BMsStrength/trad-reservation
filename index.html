@@ -3,6 +3,9 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
   <title>予約 | TRAD パーソナルコンディショニングジム</title>
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#0B3D91">
@@ -608,25 +611,67 @@
 
   <script>
     var API_BASE = 'https://script.google.com/macros/s/AKfycbxzphUXhjAEwxFsj6napghnfRZh7R7p15L_iDfKwM9p56wdRrDsIbQrXzggFdqjgihY/exec';
+    var API_TIMEOUT_MS = 20000; // GASのコールドスタートや一時遅延を考慮
+    var API_RETRY_MAX = 2;
 
-    // ===== JSONP with timeout =====
+    // ===== JSONP with timeout/retry/cache-busting =====
     var _jid = 0;
-    function gasGet(params, cb) {
-      var n = '_gc_' + (++_jid), done = false;
-      window[n] = function(d) { if(done)return; done=true; clearTimeout(t); delete window[n]; var e=document.getElementById(n); if(e)e.remove(); cb(null,d); };
-      var qs = Object.keys(params).map(function(k){return encodeURIComponent(k)+'='+encodeURIComponent(params[k]);}).join('&');
-      var s = document.createElement('script'); s.id=n; s.src=API_BASE+'?'+qs+'&callback='+n;
-      s.onerror = function(){if(done)return;done=true;clearTimeout(t);delete window[n];s.remove();cb(new Error('err'));};
-      var t = setTimeout(function(){if(done)return;done=true;delete window[n];var e=document.getElementById(n);if(e)e.remove();cb(new Error('timeout'));},8000);
+    function buildQuery(params) {
+      var q = [];
+      Object.keys(params || {}).forEach(function(k) {
+        if (params[k] === undefined || params[k] === null) return;
+        q.push(encodeURIComponent(k) + '=' + encodeURIComponent(params[k]));
+      });
+      return q.join('&');
+    }
+    function makeApiUrl(params) {
+      var p = {};
+      Object.keys(params || {}).forEach(function(k) { p[k] = params[k]; });
+      // 複数Googleアカウント環境で /u/1/ に寄るのを避けるため明示
+      p.authuser = '0';
+      // GitHub Pages / PWA / ブラウザキャッシュ対策
+      p._ = Date.now() + '_' + Math.floor(Math.random() * 1000000);
+      return API_BASE + '?' + buildQuery(p);
+    }
+    function cleanupJsonp(name, timer) {
+      if (timer) clearTimeout(timer);
+      try { delete window[name]; } catch(e) { window[name] = undefined; }
+      var el = document.getElementById(name);
+      if (el && el.parentNode) el.parentNode.removeChild(el);
+    }
+    function jsonpRequest(params, cb, attempt) {
+      attempt = attempt || 0;
+      var n = '_gc_' + (++_jid) + '_' + Math.floor(Math.random() * 1000000);
+      var done = false;
+      var timer = null;
+      function finish(err, data) {
+        if (done) return;
+        done = true;
+        cleanupJsonp(n, timer);
+        if (err && attempt < API_RETRY_MAX) {
+          setTimeout(function() { jsonpRequest(params, cb, attempt + 1); }, 800 * (attempt + 1));
+          return;
+        }
+        cb(err, data);
+      }
+      window[n] = function(d) { finish(null, d); };
+      var req = {};
+      Object.keys(params || {}).forEach(function(k) { req[k] = params[k]; });
+      req.callback = n;
+      var s = document.createElement('script');
+      s.id = n;
+      s.async = true;
+      s.referrerPolicy = 'no-referrer';
+      s.src = makeApiUrl(req);
+      s.onerror = function() { finish(new Error('script_load_error')); };
+      timer = setTimeout(function() { finish(new Error('timeout')); }, API_TIMEOUT_MS);
       document.body.appendChild(s);
     }
+    function gasGet(params, cb) {
+      jsonpRequest(params, cb);
+    }
     function gasPost(body, cb) {
-      var n = '_gc_' + (++_jid), done = false;
-      window[n] = function(d) { if(done)return; done=true; clearTimeout(t); delete window[n]; var e=document.getElementById(n); if(e)e.remove(); cb(null,d); };
-      var s = document.createElement('script'); s.id=n; s.src=API_BASE+'?payload='+encodeURIComponent(JSON.stringify(body))+'&callback='+n;
-      s.onerror = function(){if(done)return;done=true;clearTimeout(t);delete window[n];s.remove();cb(new Error('err'));};
-      var t = setTimeout(function(){if(done)return;done=true;delete window[n];var e=document.getElementById(n);if(e)e.remove();cb(new Error('timeout'));},8000);
-      document.body.appendChild(s);
+      jsonpRequest({ payload: JSON.stringify(body) }, cb);
     }
 
     // ===== STATE =====
@@ -963,7 +1008,13 @@
     function showError(msg){var el=document.getElementById('errorMsg');el.textContent=msg;el.classList.add('show');window.scrollTo(0,0);}
     function clearError(){document.getElementById('errorMsg').classList.remove('show');}
 
-    if('serviceWorker' in navigator){navigator.serviceWorker.register('sw.js').catch(function(){});}
+    // GitHub Pages版では古いPWAキャッシュが接続エラーを起こすことがあるため、
+    // いったんService Workerは登録せず、既存登録があれば解除する。
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.getRegistrations().then(function(regs) {
+        regs.forEach(function(reg) { reg.unregister(); });
+      }).catch(function(){});
+    }
   </script>
 </body>
 </html>
