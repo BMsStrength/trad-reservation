@@ -620,7 +620,8 @@
       <div class="modal-title">繰り返し予約を登録</div>
       <p style="font-size:12px;color:var(--gray-600);margin-bottom:16px;">登録すると1ヶ月先まで自動で予約が入り、毎日自動延長されます。</p>
       <div class="form-row">
-        <div class="form-group"><label class="form-label">お客様名</label><input class="form-input" id="rName"></div>
+        <div class="form-group"><label class="form-label">お客様名</label><input class="form-input" id="rName" oninput="autoFillCustomer('r')"></div>
+        <div class="form-group"><label class="form-label">法人名（任意）</label><input class="form-input" id="rCorpName" placeholder="例：〇〇株式会社"></div>
       </div>
       <div class="form-row">
         <div class="form-group"><label class="form-label">メール</label><input class="form-input" type="email" id="rEmail"></div>
@@ -1299,6 +1300,7 @@
         customer_name: document.getElementById('rName').value,
         customer_email: document.getElementById('rEmail').value,
         customer_phone: document.getElementById('rPhone').value,
+        corporate_name: document.getElementById('rCorpName').value,
         menu: document.getElementById('rMenu').value,
         day_of_week: parseInt(document.getElementById('rDay').value),
         start_time: document.getElementById('rTime').value
