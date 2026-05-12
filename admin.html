@@ -722,52 +722,45 @@
       showAdmin();
     }
 
-    // JSONP helpers with timeout/retry/cache-busting
-    var _jid = 0;
-    function addApiParams(url, params) {
-      var sep = url.indexOf('?') === -1 ? '?' : '&';
-      var q = Object.keys(params || {}).map(function(k) {
-        return encodeURIComponent(k) + '=' + encodeURIComponent(params[k]);
-      }).join('&');
-      return url + sep + q;
-    }
-    function cleanupJsonp(name, timer) {
-      if (timer) clearTimeout(timer);
-      try { delete window[name]; } catch(e) { window[name] = undefined; }
-      var el = document.getElementById(name);
-      if (el && el.parentNode) el.parentNode.removeChild(el);
-    }
-    function _jsonp(url, cb, attempt) {
+    // fetch-based API helpers
+    function _gasRequest(method, paramsOrBody, attempt) {
       attempt = attempt || 0;
-      var n = '_gcb_' + (++_jid) + '_' + Math.floor(Math.random() * 1000000);
-      var done = false;
-      var timer = null;
-      function finish(data, shouldRetry) {
-        if (done) return;
-        done = true;
-        cleanupJsonp(n, timer);
-        if (shouldRetry && attempt < API_RETRY_MAX) {
-          setTimeout(function() { _jsonp(url, cb, attempt + 1); }, 800 * (attempt + 1));
-          return;
-        }
-        cb(data);
+      var url, fetchOpts;
+      if (method === 'GET') {
+        var q = Object.keys(paramsOrBody || {}).filter(function(k) {
+          return paramsOrBody[k] !== undefined && paramsOrBody[k] !== null;
+        }).map(function(k) {
+          return encodeURIComponent(k) + '=' + encodeURIComponent(paramsOrBody[k]);
+        });
+        q.push('_=' + Date.now());
+        url = API_BASE + '?' + q.join('&');
+        fetchOpts = { method: 'GET', redirect: 'follow' };
+      } else {
+        url = API_BASE;
+        fetchOpts = {
+          method: 'POST',
+          redirect: 'follow',
+          headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
+          body: JSON.stringify(paramsOrBody)
+        };
       }
-      window[n] = function(d) { finish(d, false); };
-      var finalUrl = addApiParams(url, {
-        authuser: '0',
-        _: Date.now() + '_' + Math.floor(Math.random() * 1000000),
-        callback: n
-      });
-      var s = document.createElement('script');
-      s.id = n;
-      s.async = true;
-      s.referrerPolicy = 'no-referrer';
-      s.src = finalUrl;
-      s.onerror = function() { finish({error:'接続エラー'}, true); };
-      timer = setTimeout(function() {
-        finish({error:'タイムアウト: サーバーの応答が遅いです。再度お試しください。'}, true);
-      }, API_TIMEOUT_MS);
-      document.body.appendChild(s);
+      var controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+      if (controller) fetchOpts.signal = controller.signal;
+      var timer = controller ? setTimeout(function() { controller.abort(); }, API_TIMEOUT_MS) : null;
+      return fetch(url, fetchOpts)
+        .then(function(res) {
+          if (timer) clearTimeout(timer);
+          return res.json();
+        })
+        .catch(function(err) {
+          if (timer) clearTimeout(timer);
+          if (attempt < API_RETRY_MAX) {
+            return new Promise(function(resolve) {
+              setTimeout(function() { resolve(_gasRequest(method, paramsOrBody, attempt + 1)); }, 800 * (attempt + 1));
+            });
+          }
+          return { error: (err && err.message) ? err.message : '接続エラーが発生しました。' };
+        });
     }
 
     function doLogin() {
@@ -778,8 +771,7 @@
       btn.disabled = true;
       document.getElementById('loginError').style.display = 'none';
 
-      var payload = encodeURIComponent(JSON.stringify({action:'adminLogin', password:pw}));
-      _jsonp(API_BASE + '?payload=' + payload, function(data) {
+      _gasRequest('POST', { action: 'adminLogin', password: pw }).then(function(data) {
         btn.textContent = 'ログイン';
         btn.disabled = false;
         if (data.error) {
@@ -856,19 +848,16 @@
     }
 
     function apiGet(action, extra) {
-      var url = API_BASE + '?action=' + action + '&adminToken=' + adminToken + (extra||'');
-      return { then: function(handler) {
-        _jsonp(url, function(data) { handler(data); });
-        return { catch: function(){} };
-      }};
+      var params = { action: action, adminToken: adminToken };
+      if (extra) {
+        var sp = new URLSearchParams(extra.replace(/^[?&]/, ''));
+        sp.forEach(function(v, k) { params[k] = v; });
+      }
+      return _gasRequest('GET', params);
     }
     function apiPost(body) {
       body.adminToken = adminToken;
-      var payload = encodeURIComponent(JSON.stringify(body));
-      return { then: function(handler) {
-        _jsonp(API_BASE + '?payload=' + payload, function(data) { handler(data); });
-        return { catch: function(){} };
-      }};
+      return _gasRequest('POST', body);
     }
 
     // ===== DASHBOARD (Weekly Schedule) =====
