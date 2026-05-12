@@ -1,0 +1,1020 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
+  <title>予約 | TRAD パーソナルコンディショニングジム</title>
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#0B3D91">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="apple-touch-icon" href="icon-192.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --brand-blue: #0B3D91;
+      --brand-blue-light: #1565C0;
+      --brand-blue-pale: #E3F2FD;
+      --brand-blue-dark: #062657;
+      --white: #FFFFFF;
+      --gray-50: #FAFAFA;
+      --gray-100: #F5F5F5;
+      --gray-200: #EEEEEE;
+      --gray-300: #E0E0E0;
+      --gray-400: #BDBDBD;
+      --gray-500: #9E9E9E;
+      --gray-600: #757575;
+      --gray-700: #616161;
+      --gray-800: #424242;
+      --gray-900: #212121;
+      --success: #2E7D32;
+      --danger: #C62828;
+      --warning: #F57F17;
+      --radius: 12px;
+      --radius-sm: 8px;
+      --shadow: 0 2px 8px rgba(0,0,0,0.08);
+      --shadow-lg: 0 4px 20px rgba(0,0,0,0.12);
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: 'Noto Sans JP', sans-serif;
+      background: var(--gray-50);
+      color: var(--gray-900);
+      min-height: 100vh;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* ===== Header ===== */
+    .header {
+      background: var(--brand-blue);
+      color: var(--white);
+      padding: 16px 20px;
+      text-align: center;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      box-shadow: 0 2px 12px rgba(11,61,145,0.3);
+    }
+    .header-logo {
+      height: 32px;
+      margin-bottom: 4px;
+    }
+    .header-title {
+      font-size: 11px;
+      font-weight: 400;
+      letter-spacing: 2px;
+      opacity: 0.85;
+    }
+
+    /* ===== Progress Steps ===== */
+    .progress {
+      display: flex;
+      justify-content: center;
+      gap: 0;
+      padding: 20px 16px 12px;
+      background: var(--white);
+      border-bottom: 1px solid var(--gray-200);
+    }
+    .progress-step {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      color: var(--gray-400);
+      font-weight: 500;
+    }
+    .progress-step.active {
+      color: var(--brand-blue);
+    }
+    .progress-step.done {
+      color: var(--success);
+    }
+    .progress-num {
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 11px;
+      font-weight: 700;
+      background: var(--gray-200);
+      color: var(--gray-500);
+    }
+    .progress-step.active .progress-num {
+      background: var(--brand-blue);
+      color: var(--white);
+    }
+    .progress-step.done .progress-num {
+      background: var(--success);
+      color: var(--white);
+    }
+    .progress-arrow {
+      color: var(--gray-300);
+      margin: 0 8px;
+      font-size: 14px;
+    }
+
+    /* ===== Container ===== */
+    .container {
+      max-width: 480px;
+      margin: 0 auto;
+      padding: 0 16px 100px;
+    }
+
+    /* ===== Step sections ===== */
+    .step-section {
+      display: none;
+      animation: fadeIn 0.3s ease;
+    }
+    .step-section.active {
+      display: block;
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(8px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .section-title {
+      font-size: 18px;
+      font-weight: 700;
+      margin: 24px 0 16px;
+      color: var(--gray-900);
+    }
+
+    /* ===== Menu Cards ===== */
+    .menu-card {
+      background: var(--white);
+      border: 2px solid var(--gray-200);
+      border-radius: var(--radius);
+      padding: 20px;
+      margin-bottom: 12px;
+      cursor: pointer;
+      transition: all 0.2s;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .menu-card:hover {
+      border-color: var(--brand-blue-light);
+      box-shadow: var(--shadow);
+    }
+    .menu-card.selected {
+      border-color: var(--brand-blue);
+      background: var(--brand-blue-pale);
+    }
+    .menu-name {
+      font-size: 16px;
+      font-weight: 700;
+    }
+    .menu-duration {
+      font-size: 13px;
+      color: var(--gray-600);
+      margin-top: 4px;
+    }
+    .menu-check {
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      border: 2px solid var(--gray-300);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      transition: all 0.2s;
+    }
+    .menu-card.selected .menu-check {
+      border-color: var(--brand-blue);
+      background: var(--brand-blue);
+      color: var(--white);
+    }
+
+    /* ===== 2-Week Slot Table (かんざし風) ===== */
+    .week-nav {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin: 20px 0 8px;
+    }
+    .week-nav-btn {
+      background: none; border: 1px solid var(--gray-300);
+      border-radius: var(--radius-sm); padding: 8px 14px;
+      cursor: pointer; font-size: 13px; color: var(--gray-700);
+    }
+    .week-nav-btn:hover { background: var(--gray-100); }
+    .week-nav-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+    .week-nav-label { font-size: 15px; font-weight: 700; }
+
+    .slot-table-wrap {
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+      margin-bottom: 20px;
+      border: 1px solid var(--gray-200);
+      border-radius: var(--radius-sm);
+    }
+    .slot-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+      min-width: 500px;
+    }
+    .slot-table th {
+      background: var(--gray-50);
+      padding: 8px 2px;
+      text-align: center;
+      font-weight: 700;
+      font-size: 12px;
+      border-bottom: 2px solid var(--gray-200);
+      position: sticky; top: 0; z-index: 2;
+      line-height: 1.4;
+    }
+    .slot-table th.sun { color: var(--danger); }
+    .slot-table th.sat { color: var(--brand-blue); }
+    .slot-table th.tue { color: var(--gray-400); }
+    .slot-table th.today-col { background: var(--brand-blue-pale); }
+    .slot-table th.closed-col { background: #f0f0f0; color: var(--gray-400); }
+    .slot-table th.past-col { background: #f5f5f5; color: var(--gray-400); }
+
+    .slot-table td {
+      text-align: center;
+      padding: 6px 2px;
+      border-bottom: 1px solid var(--gray-100);
+      border-right: 1px solid var(--gray-100);
+      min-width: 36px;
+      height: 32px;
+    }
+    .slot-table td:first-child {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--gray-600);
+      background: var(--gray-50);
+      position: sticky; left: 0; z-index: 1;
+      min-width: 50px;
+      border-right: 2px solid var(--gray-200);
+    }
+    .slot-table td.today-col { background: rgba(227,242,253,0.25); }
+    .slot-table td.closed-col { background: #f5f5f5; }
+    .slot-table td.past-col { background: #fafafa; }
+
+    .slot-mark {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 28px; height: 28px; border-radius: 50%;
+      font-size: 14px; font-weight: 700; cursor: pointer; transition: all 0.15s;
+    }
+    .slot-mark.avail { color: var(--success); }
+    .slot-mark.avail:hover { background: #E8F5E9; transform: scale(1.15); }
+    .slot-mark.taken { color: var(--gray-300); cursor: default; }
+    .slot-mark.closed { color: var(--gray-200); cursor: default; }
+    .slot-mark.selected {
+      background: var(--brand-blue); color: var(--white);
+      transform: scale(1.1); box-shadow: 0 2px 8px rgba(11,61,145,0.3);
+    }
+
+    .slot-table-loading {
+      text-align: center; padding: 40px; color: var(--gray-500);
+    }
+
+    /* ===== Form ===== */
+    .form-group {
+      margin-bottom: 20px;
+    }
+    .form-label {
+      display: block;
+      font-size: 13px;
+      font-weight: 700;
+      margin-bottom: 6px;
+      color: var(--gray-700);
+    }
+    .form-label .required {
+      color: var(--danger);
+      margin-left: 4px;
+      font-size: 11px;
+    }
+    .form-input {
+      width: 100%;
+      padding: 14px 16px;
+      border: 2px solid var(--gray-200);
+      border-radius: var(--radius-sm);
+      font-size: 16px;
+      font-family: inherit;
+      transition: border-color 0.2s;
+      -webkit-appearance: none;
+    }
+    .form-input:focus {
+      outline: none;
+      border-color: var(--brand-blue);
+    }
+
+    /* ===== Confirm ===== */
+    .confirm-card {
+      background: var(--white);
+      border-radius: var(--radius);
+      padding: 24px;
+      box-shadow: var(--shadow);
+      margin: 24px 0;
+    }
+    .confirm-row {
+      display: flex;
+      padding: 12px 0;
+      border-bottom: 1px solid var(--gray-100);
+    }
+    .confirm-row:last-child { border-bottom: none; }
+    .confirm-label {
+      width: 100px;
+      font-size: 13px;
+      color: var(--gray-600);
+      flex-shrink: 0;
+    }
+    .confirm-value {
+      font-size: 15px;
+      font-weight: 500;
+    }
+
+    /* ===== Buttons ===== */
+    .btn {
+      width: 100%;
+      padding: 16px;
+      border: none;
+      border-radius: var(--radius);
+      font-size: 16px;
+      font-weight: 700;
+      font-family: inherit;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .btn-primary {
+      background: var(--brand-blue);
+      color: var(--white);
+    }
+    .btn-primary:hover { background: var(--brand-blue-dark); }
+    .btn-primary:disabled {
+      background: var(--gray-300);
+      cursor: not-allowed;
+    }
+    .btn-secondary {
+      background: var(--white);
+      color: var(--gray-700);
+      border: 2px solid var(--gray-300);
+      margin-top: 8px;
+    }
+    .btn-secondary:hover { background: var(--gray-50); }
+
+    .btn-group {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      padding: 12px 16px;
+      background: var(--white);
+      border-top: 1px solid var(--gray-200);
+      max-width: 480px;
+      margin: 0 auto;
+      z-index: 50;
+    }
+
+    /* ===== Complete ===== */
+    .complete-icon {
+      width: 64px;
+      height: 64px;
+      background: var(--success);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 40px auto 20px;
+      color: var(--white);
+      font-size: 32px;
+    }
+    .complete-title {
+      text-align: center;
+      font-size: 20px;
+      font-weight: 700;
+      margin-bottom: 8px;
+    }
+    .complete-subtitle {
+      text-align: center;
+      font-size: 14px;
+      color: var(--gray-600);
+      margin-bottom: 24px;
+    }
+
+    /* ===== Cart (予約カート) ===== */
+    .cart-bar {
+      position: fixed; bottom: 0; left: 0; right: 0;
+      background: var(--white); border-top: 2px solid var(--brand-blue);
+      box-shadow: 0 -4px 20px rgba(0,0,0,0.12);
+      max-width: 480px; margin: 0 auto; z-index: 80;
+      padding: 12px 16px; display: none;
+    }
+    .cart-bar.show { display: block; }
+    .cart-title { font-size: 14px; font-weight: 700; margin-bottom: 8px; display: flex; justify-content: space-between; }
+    .cart-item {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 8px 0; border-bottom: 1px solid var(--gray-100); font-size: 13px;
+    }
+    .cart-item:last-child { border-bottom: none; }
+    .cart-item-info { flex: 1; }
+    .cart-item-menu { font-size: 11px; color: var(--gray-500); }
+    .cart-remove { color: var(--danger); cursor: pointer; font-size: 18px; padding: 4px 8px; }
+    .cart-actions { display: flex; gap: 8px; margin-top: 10px; }
+    .cart-actions .btn { flex: 1; padding: 12px; font-size: 14px; }
+
+    /* ===== Loading Overlay ===== */
+    .loading-overlay {
+      display: none;
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(255,255,255,0.85);
+      z-index: 1000;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+    }
+    .loading-overlay.show { display: flex; }
+    .spinner {
+      width: 40px;
+      height: 40px;
+      border: 4px solid var(--gray-200);
+      border-top-color: var(--brand-blue);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .loading-text {
+      margin-top: 16px;
+      font-size: 14px;
+      color: var(--gray-600);
+    }
+
+    /* ===== Error ===== */
+    .error-msg {
+      background: #FFEBEE;
+      color: var(--danger);
+      padding: 12px 16px;
+      border-radius: var(--radius-sm);
+      font-size: 13px;
+      margin-bottom: 16px;
+      display: none;
+    }
+    .error-msg.show { display: block; }
+  </style>
+</head>
+<body>
+
+  <!-- Header -->
+  <div class="header">
+    <div style="font-size:24px;font-weight:900;letter-spacing:4px;">TRAD<span style="font-size:10px;vertical-align:super;">™</span></div>
+    <div class="header-title">PERSONAL CONDITIONING GYM</div>
+  </div>
+
+  <!-- Progress -->
+  <div class="progress" id="progress">
+    <div class="progress-step active" data-step="1">
+      <span class="progress-num">1</span>
+      <span>メニュー</span>
+    </div>
+    <span class="progress-arrow">›</span>
+    <div class="progress-step" data-step="2">
+      <span class="progress-num">2</span>
+      <span>日時</span>
+    </div>
+    <span class="progress-arrow">›</span>
+    <div class="progress-step" data-step="3">
+      <span class="progress-num">3</span>
+      <span>情報入力</span>
+    </div>
+    <span class="progress-arrow">›</span>
+    <div class="progress-step" data-step="4">
+      <span class="progress-num">4</span>
+      <span>確認</span>
+    </div>
+  </div>
+
+  <div class="container">
+
+    <!-- Error message -->
+    <div class="error-msg" id="errorMsg"></div>
+
+    <!-- ===== STEP 1: Menu Selection ===== -->
+    <div class="step-section active" id="step1">
+      <h2 class="section-title">メニューを選択</h2>
+      <div id="menuList"></div>
+    </div>
+
+    <!-- ===== STEP 2: Date/Time Selection (2-week table) ===== -->
+    <div class="step-section" id="step2">
+      <h2 class="section-title">日時を選択</h2>
+      <p style="font-size:13px;color:var(--gray-600);margin-bottom:8px;">
+        選択中のメニュー: <strong id="step2MenuLabel"></strong>
+        <a href="#" onclick="goToStep(1);return false;" style="color:var(--brand-blue);margin-left:8px;font-size:12px;">メニューを変更</a>
+      </p>
+
+      <div class="week-nav">
+        <button class="week-nav-btn" id="weekPrev" onclick="changeWeekPage(-1)">‹ 前の週へ</button>
+        <span class="week-nav-label" id="weekLabel"></span>
+        <button class="week-nav-btn" id="weekNext" onclick="changeWeekPage(1)">次の週へ ›</button>
+      </div>
+
+      <div id="slotTableArea">
+        <div class="slot-table-loading">
+          <div class="spinner" style="margin:0 auto;"></div>
+          <div style="margin-top:12px;">空き状況を読み込み中...</div>
+        </div>
+      </div>
+
+      <div class="btn-group" id="step2Buttons" style="display:none;">
+        <button class="btn btn-secondary" onclick="goToStep(1)">メニュー選択に戻る</button>
+      </div>
+    </div>
+
+    <!-- ===== STEP 3: Customer Info ===== -->
+    <div class="step-section" id="step3">
+      <h2 class="section-title">お客様情報</h2>
+
+      <div class="form-group">
+        <label class="form-label">お名前<span class="required">必須</span></label>
+        <input class="form-input" type="text" id="inputName" placeholder="例：山田 太郎" autocomplete="name">
+      </div>
+      <div class="form-group">
+        <label class="form-label">メールアドレス<span class="required">必須</span></label>
+        <input class="form-input" type="email" id="inputEmail" placeholder="例：taro@example.com" autocomplete="email">
+      </div>
+      <div class="form-group">
+        <label class="form-label">電話番号<span class="required">必須</span></label>
+        <input class="form-input" type="tel" id="inputPhone" placeholder="例：090-1234-5678" autocomplete="tel">
+      </div>
+
+      <div class="btn-group">
+        <button class="btn btn-primary" id="btnStep3Next" onclick="goToStep(4)">次へ — 確認画面</button>
+        <button class="btn btn-secondary" onclick="goToStep(2)">戻る</button>
+      </div>
+    </div>
+
+    <!-- ===== STEP 4: Confirmation ===== -->
+    <div class="step-section" id="step4">
+      <h2 class="section-title">ご予約内容の確認</h2>
+
+      <div id="confirmList"></div>
+
+      <div class="confirm-card">
+        <div class="confirm-row"><div class="confirm-label">お名前</div><div class="confirm-value" id="confirmName"></div></div>
+        <div class="confirm-row"><div class="confirm-label">メール</div><div class="confirm-value" id="confirmEmail"></div></div>
+        <div class="confirm-row"><div class="confirm-label">電話番号</div><div class="confirm-value" id="confirmPhone"></div></div>
+      </div>
+
+      <div class="btn-group">
+        <button class="btn btn-primary" id="btnSubmit" onclick="submitReservation()">予約を確定する</button>
+        <button class="btn btn-secondary" onclick="goToStep(3)">戻る</button>
+      </div>
+    </div>
+
+    <!-- ===== STEP 5: Complete ===== -->
+    <div class="step-section" id="step5">
+      <div class="complete-icon">✓</div>
+      <h2 class="complete-title">ご予約ありがとうございます</h2>
+      <p class="complete-subtitle">確認メールをお送りしました。<br>メールが届かない場合はお問い合わせください。</p>
+
+      <div id="completeList"></div>
+
+      <p style="font-size:13px;color:var(--gray-600);text-align:center;margin-top:16px;">
+        予約の変更・キャンセルは確認メールに記載のリンクから<br>前日23:59まで可能です。
+      </p>
+
+      <div style="margin-top:24px;">
+        <button class="btn btn-primary" onclick="location.reload()">予約サイトトップへ戻る</button>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Cart Bar (固定フッター) -->
+  <div class="cart-bar" id="cartBar">
+    <div class="cart-title"><span>🛒 予約カート（<span id="cartCount">0</span>件）</span></div>
+    <div id="cartItems"></div>
+    <div class="cart-actions">
+      <button class="btn btn-secondary" onclick="addMoreToCart()">+ もう1件追加</button>
+      <button class="btn btn-primary" onclick="goToStep(3)">予約に進む</button>
+    </div>
+  </div>
+
+  <!-- Loading Overlay -->
+  <div class="loading-overlay" id="loadingOverlay">
+    <div class="spinner"></div>
+    <div class="loading-text" id="loadingText">読み込み中...</div>
+  </div>
+
+  <script>
+    var API_BASE = 'https://script.google.com/macros/s/AKfycbxzphUXhjAEwxFsj6napghnfRZh7R7p15L_iDfKwM9p56wdRrDsIbQrXzggFdqjgihY/exec';
+    var API_TIMEOUT_MS = 20000; // GASのコールドスタートや一時遅延を考慮
+    var API_RETRY_MAX = 2;
+
+    // ===== JSONP with timeout/retry/cache-busting =====
+    var _jid = 0;
+    function buildQuery(params) {
+      var q = [];
+      Object.keys(params || {}).forEach(function(k) {
+        if (params[k] === undefined || params[k] === null) return;
+        q.push(encodeURIComponent(k) + '=' + encodeURIComponent(params[k]));
+      });
+      return q.join('&');
+    }
+    function makeApiUrl(params) {
+      var p = {};
+      Object.keys(params || {}).forEach(function(k) { p[k] = params[k]; });
+      // 複数Googleアカウント環境で /u/1/ に寄るのを避けるため明示
+      p.authuser = '0';
+      // GitHub Pages / PWA / ブラウザキャッシュ対策
+      p._ = Date.now() + '_' + Math.floor(Math.random() * 1000000);
+      return API_BASE + '?' + buildQuery(p);
+    }
+    function cleanupJsonp(name, timer) {
+      if (timer) clearTimeout(timer);
+      try { delete window[name]; } catch(e) { window[name] = undefined; }
+      var el = document.getElementById(name);
+      if (el && el.parentNode) el.parentNode.removeChild(el);
+    }
+    function jsonpRequest(params, cb, attempt) {
+      attempt = attempt || 0;
+      var n = '_gc_' + (++_jid) + '_' + Math.floor(Math.random() * 1000000);
+      var done = false;
+      var timer = null;
+      function finish(err, data) {
+        if (done) return;
+        done = true;
+        cleanupJsonp(n, timer);
+        if (err && attempt < API_RETRY_MAX) {
+          setTimeout(function() { jsonpRequest(params, cb, attempt + 1); }, 800 * (attempt + 1));
+          return;
+        }
+        cb(err, data);
+      }
+      window[n] = function(d) { finish(null, d); };
+      var req = {};
+      Object.keys(params || {}).forEach(function(k) { req[k] = params[k]; });
+      req.callback = n;
+      var s = document.createElement('script');
+      s.id = n;
+      s.async = true;
+      s.referrerPolicy = 'no-referrer';
+      s.src = makeApiUrl(req);
+      s.onerror = function() { finish(new Error('script_load_error')); };
+      timer = setTimeout(function() { finish(new Error('timeout')); }, API_TIMEOUT_MS);
+      document.body.appendChild(s);
+    }
+    function gasGet(params, cb) {
+      jsonpRequest(params, cb);
+    }
+    function gasPost(body, cb) {
+      jsonpRequest({ payload: JSON.stringify(body) }, cb);
+    }
+
+    // ===== STATE =====
+    var state = {
+      menus: [], selectedMenu: null, closedDay: 2, bufferMin: 10, dailyMax: 10, bookableUntil: null
+    };
+    var cart = []; // [{menu, menuDuration, date, time}]
+    var slotCache = {};
+    var weekPage = 0;
+    var lastSlotCacheMenu = null; // スロットキャッシュが有効なメニュー名
+    var dayNames = ['日','月','火','水','木','金','土'];
+
+    // ===== INIT with localStorage cache =====
+    var SETTINGS_TTL = 30 * 60 * 1000; // 設定キャッシュの有効期限: 30分
+
+    document.addEventListener('DOMContentLoaded', function() {
+      var cached = null;
+      try {
+        var raw = localStorage.getItem('trad_settings');
+        if (raw) {
+          var parsed = JSON.parse(raw);
+          // 30分以内のキャッシュのみ有効
+          if (parsed && parsed.menus && parsed._ts && Date.now() - parsed._ts < SETTINGS_TTL) {
+            cached = parsed;
+          }
+        }
+      } catch(e) {}
+
+      if (cached && cached.menus.length) {
+        // キャッシュがあれば即座に表示してバックグラウンドで更新（ローディング非表示）
+        applySettings(cached);
+        renderMenus();
+        loadSettings(true);
+      } else {
+        // キャッシュなし・期限切れはローディングを表示して取得
+        loadSettings(false);
+      }
+    });
+
+    function applySettings(data) {
+      state.menus = data.menus || [];
+      state.closedDay = data.closed_day;
+      state.bufferMin = data.buffer_min;
+      state.dailyMax = data.daily_max_reservations;
+      state.bookableUntil = data.bookable_until ? new Date(data.bookable_until + 'T23:59:59') : null;
+    }
+
+    function loadSettings(silent) {
+      if (!silent) showLoading('設定を読み込み中...');
+      gasGet({ action: 'getSettings' }, function(err, data) {
+        if (!silent) hideLoading();
+        if (err || !data || data.error) {
+          if (!state.menus.length) showError('接続エラーが発生しました。再度お試しください。');
+          return;
+        }
+        applySettings(data);
+        try {
+          data._ts = Date.now(); // TTL用タイムスタンプを付与して保存
+          localStorage.setItem('trad_settings', JSON.stringify(data));
+        } catch(e) {}
+        renderMenus();
+      });
+    }
+
+    // ===== MENU =====
+    function renderMenus() {
+      var c = document.getElementById('menuList');
+      c.innerHTML = '';
+      state.menus.forEach(function(m) {
+        var div = document.createElement('div');
+        div.className = 'menu-card' + (state.selectedMenu === m.name ? ' selected' : '');
+        div.onclick = function() { selectMenu(m.name); };
+        div.innerHTML = '<div><div class="menu-name">'+m.name+'</div><div class="menu-duration">'+m.duration+'分</div></div>' +
+          '<div class="menu-check"><span style="display:'+(state.selectedMenu===m.name?'inline':'none')+'">✓</span></div>';
+        div.dataset.menu = m.name;
+        c.appendChild(div);
+      });
+    }
+
+    function selectMenu(name) {
+      if (state.selectedMenu !== name) {
+        // メニューが変わった時だけスロットキャッシュをクリア
+        slotCache = {};
+        weekPage = 0;
+        lastSlotCacheMenu = null;
+      }
+      state.selectedMenu = name;
+      renderMenus();
+      goToStep(2);
+    }
+
+    // ===== NAVIGATION =====
+    function goToStep(step) {
+      if (step === 3 && cart.length === 0) { showError('予約をカートに追加してください。'); return; }
+      if (step === 4) {
+        var name = document.getElementById('inputName').value.trim();
+        var email = document.getElementById('inputEmail').value.trim();
+        var phone = document.getElementById('inputPhone').value.trim();
+        if (!name || !email || !phone) { showError('すべての項目を入力してください。'); return; }
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { showError('メールアドレスの形式が正しくありません。'); return; }
+        // Build confirmation
+        var html = '';
+        cart.forEach(function(item, idx) {
+          var d = new Date(item.date+'T00:00:00');
+          var endMin = timeToMin(item.time) + item.menuDuration;
+          html += '<div class="confirm-card" style="margin-bottom:8px;"><div class="confirm-row"><div class="confirm-label">予約'+(idx+1)+'</div><div class="confirm-value">'+
+            item.menu+'（'+item.menuDuration+'分）</div></div>'+
+            '<div class="confirm-row"><div class="confirm-label">日時</div><div class="confirm-value">'+
+            (d.getMonth()+1)+'/'+d.getDate()+'('+dayNames[d.getDay()]+') '+item.time+'〜'+minToTime(endMin)+'</div></div></div>';
+        });
+        document.getElementById('confirmList').innerHTML = html;
+        document.getElementById('confirmName').textContent = name;
+        document.getElementById('confirmEmail').textContent = email;
+        document.getElementById('confirmPhone').textContent = phone;
+      }
+      clearError();
+      document.querySelectorAll('.step-section').forEach(function(s){s.classList.remove('active');});
+      document.getElementById('step'+step).classList.add('active');
+      document.querySelectorAll('.progress-step').forEach(function(ps){
+        var s=parseInt(ps.dataset.step); ps.classList.remove('active','done');
+        if(s<step)ps.classList.add('done'); if(s===step)ps.classList.add('active');
+      });
+      if (step === 2) {
+        // スロットキャッシュはselectMenu()でメニュー変更時のみクリア（ここではクリアしない）
+        document.getElementById('step2MenuLabel').textContent = state.selectedMenu +
+          '（' + (state.menus.find(function(m){return m.name===state.selectedMenu;})||{}).duration + '分）';
+        loadWeekTable();
+      }
+      // Show/hide cart bar
+      document.getElementById('cartBar').classList.toggle('show', step <= 2 && cart.length > 0);
+      document.getElementById('progress').style.display = step===5?'none':'flex';
+      window.scrollTo(0,0);
+    }
+
+    // ===== CART =====
+    function addToCart(date, time) {
+      var menuData = state.menus.find(function(m){return m.name===state.selectedMenu;});
+      if (!menuData) return;
+      // Duplicate check
+      for (var i=0;i<cart.length;i++) {
+        if (cart[i].date===date && cart[i].time===time) return;
+      }
+      cart.push({ menu: state.selectedMenu, menuDuration: menuData.duration, date: date, time: time });
+      renderCart();
+      // Clear slot cache for this date (mark as taken)
+      delete slotCache[date];
+    }
+
+    function removeFromCart(idx) {
+      var removed = cart.splice(idx, 1);
+      if (removed.length) delete slotCache[removed[0].date];
+      renderCart();
+      if (cart.length === 0) document.getElementById('cartBar').classList.remove('show');
+    }
+
+    function renderCart() {
+      document.getElementById('cartCount').textContent = cart.length;
+      var html = '';
+      cart.forEach(function(item, idx) {
+        var d = new Date(item.date+'T00:00:00');
+        html += '<div class="cart-item"><div class="cart-item-info">'+(d.getMonth()+1)+'/'+d.getDate()+'('+dayNames[d.getDay()]+') '+item.time+
+          '<div class="cart-item-menu">'+item.menu+'（'+item.menuDuration+'分）</div></div>'+
+          '<span class="cart-remove" onclick="removeFromCart('+idx+')">✕</span></div>';
+      });
+      document.getElementById('cartItems').innerHTML = html;
+      document.getElementById('cartBar').classList.toggle('show', cart.length > 0);
+    }
+
+    function addMoreToCart() {
+      goToStep(1);
+    }
+
+    // ===== 2-WEEK TABLE =====
+    function changeWeekPage(d) { weekPage+=d; if(weekPage<0)weekPage=0; loadWeekTable(); }
+
+    function getWeekDates() {
+      var today=new Date(); today.setHours(0,0,0,0);
+      var start=new Date(today); start.setDate(start.getDate()+weekPage*7);
+      var dates=[];
+      var limit=state.bookableUntil||new Date(today.getFullYear(),today.getMonth()+2,0);
+      for(var i=0;i<14;i++){var d=new Date(start);d.setDate(start.getDate()+i);if(d>limit)break;dates.push(d);}
+      return dates;
+    }
+
+    function loadWeekTable() {
+      var dates=getWeekDates();
+      if(!dates.length){document.getElementById('slotTableArea').innerHTML='<div style="text-align:center;padding:40px;color:var(--gray-500);">予約可能な日がありません</div>';return;}
+      document.getElementById('weekLabel').textContent=(dates[0].getMonth()+1)+'月';
+      document.getElementById('weekPrev').disabled=(weekPage===0);
+      document.getElementById('slotTableArea').innerHTML='<div style="text-align:center;padding:40px;color:var(--gray-500);"><div class="spinner" style="margin:0 auto;"></div><div style="margin-top:12px;">空き状況を確認中...</div></div>';
+
+      var today=new Date();today.setHours(0,0,0,0);
+      var allSlots={};
+      var needFetch=false;
+
+      // キャッシュ済み・確定休日はAPIコール不要
+      dates.forEach(function(d){
+        var ds=fmtDate(d);
+        if(d<=today||d.getDay()===state.closedDay){allSlots[ds]={closed:true};}
+        else if(slotCache[ds]){allSlots[ds]=slotCache[ds];}
+        else{needFetch=true;}
+      });
+
+      if(!needFetch){renderSlotTable(dates,allSlots);return;}
+
+      // バッチAPI: 1回のリクエストで全日分を取得
+      gasGet({action:'getWeekSlots',start_date:fmtDate(dates[0]),days:String(dates.length),menu:state.selectedMenu},function(err,data){
+        var dateData=(!err&&data&&data.dates)?data.dates:{};
+        dates.forEach(function(d){
+          var ds=fmtDate(d);
+          if(allSlots[ds])return;
+          var info=dateData[ds];
+          if(info&&!info.closed){allSlots[ds]={slots:info.slots||[]};slotCache[ds]=allSlots[ds];}
+          else{allSlots[ds]={closed:true};}
+        });
+        renderSlotTable(dates,allSlots);
+      });
+    }
+
+    function renderSlotTable(dates, allSlots) {
+      var today=new Date();today.setHours(0,0,0,0);var todayStr=fmtDate(today);
+      var timeSet={};
+      dates.forEach(function(d){var ds=fmtDate(d);var info=allSlots[ds];if(info&&info.slots)info.slots.forEach(function(s){timeSet[s.time]=true;});});
+      var times=Object.keys(timeSet).sort();
+      if(!times.length){document.getElementById('slotTableArea').innerHTML='<div style="text-align:center;padding:40px;color:var(--gray-500);">空き枠がありません</div>';return;}
+
+      // Check which slots are already in cart
+      var cartSet={};
+      cart.forEach(function(c){cartSet[c.date+'|'+c.time]=true;});
+
+      var html='<div class="slot-table-wrap"><table class="slot-table"><thead><tr><th>日時</th>';
+      dates.forEach(function(d){
+        var ds=fmtDate(d),dow=d.getDay(),cls=[];
+        if(dow===0)cls.push('sun');if(dow===6)cls.push('sat');
+        if(dow===state.closedDay)cls.push('closed-col');if(d<=today)cls.push('past-col');
+        if(ds===todayStr)cls.push('today-col');
+        html+='<th class="'+cls.join(' ')+'">'+(d.getMonth()+1)+'/'+d.getDate()+'<br><span style="font-size:10px;">('+dayNames[dow]+')</span></th>';
+      });
+      html+='</tr></thead><tbody>';
+
+      times.forEach(function(time){
+        var mins=time.split(':'),isFull=(parseInt(mins[1])===0);
+        html+='<tr><td'+(isFull?' style="font-size:13px;font-weight:700;"':'')+'>' +time+'</td>';
+        dates.forEach(function(d){
+          var ds=fmtDate(d),dow=d.getDay(),cls=[];
+          if(ds===todayStr)cls.push('today-col');if(dow===state.closedDay)cls.push('closed-col');if(d<=today)cls.push('past-col');
+          var tdCls=cls.length?' class="'+cls.join(' ')+'"':'';
+          if(dow===state.closedDay||d<=today){html+='<td'+tdCls+'></td>';return;}
+          var info=allSlots[ds];
+          if(!info||info.closed){html+='<td'+tdCls+'></td>';return;}
+          var slot=null;
+          if(info.slots)for(var i=0;i<info.slots.length;i++){if(info.slots[i].time===time){slot=info.slots[i];break;}}
+          if(!slot){html+='<td'+tdCls+'></td>';}
+          else if(cartSet[ds+'|'+time]){html+='<td'+tdCls+'><span class="slot-mark selected">✓</span></td>';}
+          else if(slot.available){html+='<td'+tdCls+'><span class="slot-mark avail" onclick="selectSlotCell(\''+ds+'\',\''+time+'\')">◯</span></td>';}
+          else{html+='<td'+tdCls+'><span class="slot-mark taken">✕</span></td>';}
+        });
+        html+='</tr>';
+      });
+      html+='</tbody></table></div>';
+      document.getElementById('slotTableArea').innerHTML=html;
+    }
+
+    function selectSlotCell(date, time) {
+      addToCart(date, time);
+      // Re-render table to show checkmark
+      var dates=getWeekDates();
+      var allSlots={};
+      dates.forEach(function(d){
+        var ds=fmtDate(d);
+        if(slotCache[ds])allSlots[ds]=slotCache[ds];
+        else allSlots[ds]={closed:true};
+      });
+      renderSlotTable(dates, allSlots);
+    }
+
+    // ===== SUBMIT =====
+    function submitReservation() {
+      if (cart.length === 0) return;
+      showLoading('予約を確定しています（' + cart.length + '件）...');
+      document.getElementById('btnSubmit').disabled = true;
+
+      var name = document.getElementById('inputName').value.trim();
+      var email = document.getElementById('inputEmail').value.trim();
+      var phone = document.getElementById('inputPhone').value.trim();
+      var completed = 0, errors = [];
+
+      function submitNext(idx) {
+        if (idx >= cart.length) {
+          hideLoading();
+          if (errors.length) {
+            document.getElementById('btnSubmit').disabled = false;
+            showError(errors.join('\n'));
+            return;
+          }
+          // All success
+          var html = '';
+          cart.forEach(function(item) {
+            var d = new Date(item.date+'T00:00:00');
+            var endMin = timeToMin(item.time) + item.menuDuration;
+            html += '<div class="confirm-card" style="margin-bottom:8px;"><div class="confirm-row"><div class="confirm-label">メニュー</div><div class="confirm-value">'+
+              item.menu+'</div></div><div class="confirm-row"><div class="confirm-label">日時</div><div class="confirm-value">'+
+              (d.getMonth()+1)+'/'+d.getDate()+'('+dayNames[d.getDay()]+') '+item.time+'〜'+minToTime(endMin)+'</div></div></div>';
+          });
+          document.getElementById('completeList').innerHTML = html;
+          cart = [];
+          goToStep(5);
+          return;
+        }
+
+        var item = cart[idx];
+        document.getElementById('loadingText').textContent = '予約を確定中 (' + (idx+1) + '/' + cart.length + ')...';
+
+        gasPost({
+          action: 'createReservation',
+          customer_name: name, customer_email: email, customer_phone: phone,
+          menu: item.menu, date: item.date, start_time: item.time
+        }, function(err, data) {
+          if (err || !data || data.error) {
+            errors.push((item.date + ' ' + item.time + ': ' + ((data && data.error) || '接続エラー')));
+          }
+          submitNext(idx + 1);
+        });
+      }
+      submitNext(0);
+    }
+
+    // ===== UTILS =====
+    function fmtDate(d){return d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2)+'-'+('0'+d.getDate()).slice(-2);}
+    function timeToMin(t){var p=t.split(':');return parseInt(p[0])*60+parseInt(p[1]);}
+    function minToTime(m){return('0'+Math.floor(m/60)).slice(-2)+':'+('0'+(m%60)).slice(-2);}
+    function showLoading(msg){document.getElementById('loadingText').textContent=msg||'読み込み中...';document.getElementById('loadingOverlay').classList.add('show');}
+    function hideLoading(){document.getElementById('loadingOverlay').classList.remove('show');}
+    function showError(msg){var el=document.getElementById('errorMsg');el.textContent=msg;el.classList.add('show');window.scrollTo(0,0);}
+    function clearError(){document.getElementById('errorMsg').classList.remove('show');}
+
+    // GitHub Pages版では古いPWAキャッシュが接続エラーを起こすことがあるため、
+    // いったんService Workerは登録せず、既存登録があれば解除する。
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.getRegistrations().then(function(regs) {
+        regs.forEach(function(reg) { reg.unregister(); });
+      }).catch(function(){});
+    }
+  </script>
+</body>
+</html>
