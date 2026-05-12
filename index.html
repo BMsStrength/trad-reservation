@@ -724,7 +724,7 @@
       gasGet({ action: 'getSettings' }, function(err, data) {
         if (!silent) hideLoading();
         if (err || !data || data.error) {
-          if (!state.menus.length) showError('接続エラーが発生しました。再度お試しください。');
+          if (!state.menus.length) showError((data && data.error) || '接続エラーが発生しました。再度お試しください。');
           return;
         }
         applySettings(data);
