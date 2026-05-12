@@ -1295,6 +1295,11 @@
     }
 
     function submitRecurring() {
+      var btn = document.querySelector('#recurringModal .btn-primary');
+      if (btn.disabled) return;
+      btn.disabled = true;
+      btn.textContent = '登録中...';
+
       var body = {
         action:'adminCreateRecurring',
         customer_name: document.getElementById('rName').value,
@@ -1306,6 +1311,8 @@
         start_time: document.getElementById('rTime').value
       };
       apiPost(body).then(function(data){
+        btn.disabled = false;
+        btn.textContent = '登録して予約を生成';
         if(data.error){alert(data.error);return;}
         closeModal('recurringModal');
         alert('繰り返し予約を登録し、' + data.generated + '件の予約を自動生成しました。');
