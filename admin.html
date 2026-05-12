@@ -118,7 +118,7 @@
       border-top:1px dashed rgba(0,0,0,0.06);pointer-events:none;
     }
     .sched-cell.today-col{background:rgba(11,61,145,0.03);}
-    .sched-cell:hover{background:rgba(21,101,192,0.05);}
+    .sched-cell:hover{background:rgba(21,101,192,0.05);cursor:pointer;}
     .sched-event{
       position:absolute;left:3px;right:3px;color:var(--white);
       font-size:11px;font-weight:600;padding:5px 7px;
@@ -1204,7 +1204,22 @@
     }
 
     // ===== MODALS =====
-    function openCreateModal(){initTimeSelects();document.getElementById('createModal').classList.add('show');}
+    function resetCreateForm() {
+      document.getElementById('mName').value = '';
+      document.getElementById('mEmail').value = '';
+      document.getElementById('mPhone').value = '';
+      document.getElementById('mMenu').selectedIndex = 0;
+      document.getElementById('mDate').value = '';
+      document.getElementById('mSkipNotify').checked = false;
+    }
+
+    function openCreateModal(preDate, preTime) {
+      resetCreateForm();
+      initTimeSelects();
+      if (preDate) document.getElementById('mDate').value = preDate;
+      if (preTime) document.getElementById('mTime').value = preTime;
+      document.getElementById('createModal').classList.add('show');
+    }
     function openBulkModal(){initTimeSelects();document.getElementById('bulkModal').classList.add('show');}
     function openRecurringModal(){initTimeSelects();document.getElementById('recurringModal').classList.add('show');}
     function openClosureModal(){document.getElementById('closureModal').classList.add('show');}
@@ -1528,6 +1543,20 @@
             if (data.error) { alert(data.error); return; }
             refreshDashboard();
           });
+        });
+
+        // 空セルクリックで新規予約モーダルを開く
+        cell.addEventListener('click', function(e) {
+          if (e.target !== cell) return; // 既存の予約ブロックをクリックした場合は無視
+          if (dragData) return;          // ドラッグ中は無視
+          var dayIdx = parseInt(cell.dataset.day);
+          var hour = parseInt(cell.dataset.hour);
+          if (isNaN(dayIdx) || isNaN(hour)) return;
+          var dates = getWeekDates(weekOffset);
+          if (!dates[dayIdx]) return;
+          var preDate = fmtD(dates[dayIdx]);
+          var preTime = ('0' + hour).slice(-2) + ':00';
+          openCreateModal(preDate, preTime);
         });
       });
     }
