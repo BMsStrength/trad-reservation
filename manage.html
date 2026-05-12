@@ -246,7 +246,11 @@
       if (!newDate || !newTime) { alert('日付と時間を選択してください。'); return; }
       if (!confirm('予約を変更しますか？')) return;
 
+      var btn = document.querySelector('button[onclick="submitChange()"]');
+      if (btn) { btn.disabled = true; btn.textContent = '変更中...'; }
+
       gasPost({ action: 'changeReservation', token: token, new_date: newDate, new_start_time: newTime }, function(err, data) {
+        if (btn) { btn.disabled = false; btn.textContent = '予約を変更する'; }
         if (err || !data) { alert('接続エラーが発生しました。'); return; }
         if (data.error) { alert(data.error); return; }
         document.getElementById('content').innerHTML =
@@ -258,7 +262,11 @@
     function cancelReservation() {
       if (!confirm('この予約をキャンセルしますか？')) return;
 
+      var btn = document.querySelector('button[onclick="cancelReservation()"]');
+      if (btn) { btn.disabled = true; btn.textContent = 'キャンセル中...'; }
+
       gasPost({ action: 'cancelReservation', token: token }, function(err, data) {
+        if (btn) { btn.disabled = false; btn.textContent = 'この予約をキャンセル'; }
         if (err || !data) { alert('接続エラーが発生しました。'); return; }
         if (data.error) { alert(data.error); return; }
         document.getElementById('content').innerHTML =
