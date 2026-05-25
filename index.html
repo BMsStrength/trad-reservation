@@ -550,6 +550,11 @@
         <input class="form-input" type="tel" id="inputPhone" placeholder="例：090-1234-5678" autocomplete="tel">
       </div>
 
+      <div class="form-group">
+        <label class="form-label">備考</label>
+        <textarea class="form-input" id="inputNotes" rows="3" placeholder="ご要望・連絡事項などがあればご記入ください" style="resize:vertical;"></textarea>
+      </div>
+
       <div class="btn-group">
         <button class="btn btn-primary" id="btnStep3Next" onclick="goToStep(4)">次へ — 確認画面</button>
         <button class="btn btn-secondary" onclick="goToStep(2)">戻る</button>
@@ -566,6 +571,7 @@
         <div class="confirm-row"><div class="confirm-label">お名前</div><div class="confirm-value" id="confirmName"></div></div>
         <div class="confirm-row"><div class="confirm-label">メール</div><div class="confirm-value" id="confirmEmail"></div></div>
         <div class="confirm-row"><div class="confirm-label">電話番号</div><div class="confirm-value" id="confirmPhone"></div></div>
+        <div class="confirm-row" id="confirmNotesRow" style="display:none;"><div class="confirm-label">備考</div><div class="confirm-value" id="confirmNotes"></div></div>
       </div>
 
       <div class="btn-group">
@@ -778,6 +784,14 @@
         document.getElementById('confirmName').textContent = name;
         document.getElementById('confirmEmail').textContent = email;
         document.getElementById('confirmPhone').textContent = phone;
+        var notes = document.getElementById('inputNotes').value.trim();
+        var notesRow = document.getElementById('confirmNotesRow');
+        if (notes) {
+          document.getElementById('confirmNotes').textContent = notes;
+          notesRow.style.display = '';
+        } else {
+          notesRow.style.display = 'none';
+        }
       }
       clearError();
       document.querySelectorAll('.step-section').forEach(function(s){s.classList.remove('active');});
@@ -949,6 +963,7 @@
       var name = document.getElementById('inputName').value.trim();
       var email = document.getElementById('inputEmail').value.trim();
       var phone = document.getElementById('inputPhone').value.trim();
+      var notes = document.getElementById('inputNotes').value.trim();
       var completed = 0, errors = [];
 
       function submitNext(idx) {
@@ -980,6 +995,7 @@
         gasPost({
           action: 'createReservation',
           customer_name: name, customer_email: email, customer_phone: phone,
+          notes: notes,
           menu: item.menu, date: item.date, start_time: item.time
         }, function(err, data) {
           if (err || !data || data.error) {
