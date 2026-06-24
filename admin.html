@@ -860,9 +860,41 @@
 
     /** データ変更後のリフレッシュ（キャッシュクリア付き） */
     function refreshDashboard() {
-      try { sessionStorage.clear(); } catch(e) {}
+      clearDashCache();
       loadDashboard();
       loadTodayBadge();
+    }
+
+    // ===== ダッシュボードの予約キャッシュ（localStorage = タブを閉じても残る）=====
+    // stale-while-revalidate: 前回取得分を即表示しつつ、裏で最新を取り直す。
+    var DASH_PREFIX = 'trad_dash_';
+
+    function dashCacheGet(startDate) {
+      try {
+        var raw = localStorage.getItem(DASH_PREFIX + startDate);
+        if (raw === null) return null;
+        var obj = JSON.parse(raw);
+        if (Array.isArray(obj)) return obj;          // 旧形式（素の配列）にも対応
+        return (obj && obj.r) ? obj.r : null;        // 新形式 {t, r}
+      } catch(e) { return null; }
+    }
+    function dashCacheSet(startDate, resvs) {
+      try {
+        localStorage.setItem(DASH_PREFIX + startDate, JSON.stringify({ t: Date.now(), r: resvs }));
+      } catch(e) {}
+    }
+    function dashCacheHas(startDate) {
+      try { return localStorage.getItem(DASH_PREFIX + startDate) !== null; } catch(e) { return false; }
+    }
+    function clearDashCache() {
+      try {
+        var keys = [];
+        for (var i = 0; i < localStorage.length; i++) {
+          var k = localStorage.key(i);
+          if (k && k.indexOf(DASH_PREFIX) === 0) keys.push(k);
+        }
+        keys.forEach(function(k){ localStorage.removeItem(k); });
+      } catch(e) {}
     }
 
     function getWeekDates(offset) {
@@ -895,13 +927,10 @@
     function prefetchWeek(offset) {
       var pdates = getWeekDates(offset);
       var pStart = fmtD(pdates[0]);
-      var pKey = 'trad_dash_' + pStart;
-      try {
-        if (sessionStorage.getItem(pKey) !== null) return; // 既にキャッシュ済みなら何もしない
-      } catch(e) {}
+      if (dashCacheHas(pStart)) return; // 既にキャッシュ済みなら何もしない
       apiGet('adminGetWeekReservations', '&start_date=' + pStart + '&days=7').then(function(data) {
         if (data && !data.error) {
-          try { sessionStorage.setItem(pKey, JSON.stringify(data.reservations || [])); } catch(e) {}
+          dashCacheSet(pStart, data.reservations || []);
         }
       });
     }
@@ -921,27 +950,19 @@
       var dates = getWeekDates(baseOffset);
       var todayStr = fmtD(new Date());
       var startDate = fmtD(dates[0]);
-      var cacheKey = 'trad_dash_' + startDate;
-      var grid = document.getElementById('weekSchedule');
 
       // ラベルは即座に更新（読み込み中マーカー付き）
       setWeekLabel(dates, true);
 
       // キャッシュがあれば即表示。無ければ「日付つきの空グリッド」を即座に描画する。
       // どちらの場合も、まず一瞬で日付の枠が出るようにする（5秒待たない）。
-      var hasCache = false;
-      try {
-        var cached = JSON.parse(sessionStorage.getItem(cacheKey));
-        if (cached && cached.length >= 0) {
-          hasCache = true;
-          weekReservations = mapResvToDates(cached, dates);
-          renderWeekSchedule(dates, todayStr);
-        }
-      } catch(e) {}
-
-      if (!hasCache) {
-        weekReservations = [];            // 予約は空のまま
-        renderWeekSchedule(dates, todayStr); // 日付見出し＋空セルを即描画
+      var cached = dashCacheGet(startDate);
+      if (cached) {
+        weekReservations = mapResvToDates(cached, dates);
+        renderWeekSchedule(dates, todayStr);
+      } else {
+        weekReservations = [];               // 予約は空のまま
+        renderWeekSchedule(dates, todayStr);  // 日付見出し＋空セルを即描画
       }
 
       // 裏で最新データを取得
@@ -960,14 +981,16 @@
             return;
           }
           var resvs = data.reservations || [];
-          try { sessionStorage.setItem(cacheKey, JSON.stringify(resvs)); } catch(e) {}
+          dashCacheSet(startDate, resvs);
 
           weekReservations = mapResvToDates(resvs, dates);
           renderWeekSchedule(dates, todayStr);
           setWeekLabel(dates, false);
 
           // 前後の週を先読みしておく → 次に「前週／翌週」を押すと即表示
+          // 翌週方向に2週、前週方向に1週ぶん先読み（連続して翌週を押しても待たない）
           prefetchWeek(baseOffset + 1);
+          prefetchWeek(baseOffset + 2);
           prefetchWeek(baseOffset - 1);
         });
       }
