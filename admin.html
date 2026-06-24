@@ -3,9 +3,6 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate">
-  <meta http-equiv="Pragma" content="no-cache">
-  <meta http-equiv="Expires" content="0">
   <title>管理画面 | TRAD</title>
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
   <style>
@@ -118,7 +115,7 @@
       border-top:1px dashed rgba(0,0,0,0.06);pointer-events:none;
     }
     .sched-cell.today-col{background:rgba(11,61,145,0.03);}
-    .sched-cell:hover{background:rgba(21,101,192,0.05);cursor:pointer;}
+    .sched-cell:hover{background:rgba(21,101,192,0.05);}
     .sched-event{
       position:absolute;left:3px;right:3px;color:var(--white);
       font-size:11px;font-weight:600;padding:5px 7px;
@@ -620,8 +617,7 @@
       <div class="modal-title">繰り返し予約を登録</div>
       <p style="font-size:12px;color:var(--gray-600);margin-bottom:16px;">登録すると1ヶ月先まで自動で予約が入り、毎日自動延長されます。</p>
       <div class="form-row">
-        <div class="form-group"><label class="form-label">お客様名</label><input class="form-input" id="rName" oninput="autoFillCustomer('r')"></div>
-        <div class="form-group"><label class="form-label">法人名（任意）</label><input class="form-input" id="rCorpName" placeholder="例：〇〇株式会社"></div>
+        <div class="form-group"><label class="form-label">お客様名</label><input class="form-input" id="rName"></div>
       </div>
       <div class="form-row">
         <div class="form-group"><label class="form-label">メール</label><input class="form-input" type="email" id="rEmail"></div>
@@ -681,8 +677,6 @@
 
   <script>
     var API_BASE = 'https://script.google.com/macros/s/AKfycbxzphUXhjAEwxFsj6napghnfRZh7R7p15L_iDfKwM9p56wdRrDsIbQrXzggFdqjgihY/exec';
-    var API_TIMEOUT_MS = 25000;
-    var API_RETRY_MAX = 2;
     var adminToken = localStorage.getItem('trad_admin_token') || '';
     var dayNames = ['日','月','火','水','木','金','土'];
 
@@ -718,50 +712,42 @@
       return s;
     }
 
-    // Check saved token
-    if (adminToken) {
-      showAdmin();
-    }
+    // 自動ログイン（保存済みトークン）の呼び出しは
+    // すべての変数（weekOffset など）が初期化された後に行うため、
+    // スクリプト末尾へ移動した。ここでは呼ばない。
 
-    // fetch-based API helpers
-    function _gasRequest(method, paramsOrBody, attempt) {
-      attempt = attempt || 0;
-      var url, fetchOpts;
-      if (method === 'GET') {
-        var q = Object.keys(paramsOrBody || {}).filter(function(k) {
-          return paramsOrBody[k] !== undefined && paramsOrBody[k] !== null;
-        }).map(function(k) {
-          return encodeURIComponent(k) + '=' + encodeURIComponent(paramsOrBody[k]);
-        });
-        q.push('_=' + Date.now());
-        url = API_BASE + '?' + q.join('&');
-        fetchOpts = { method: 'GET', redirect: 'follow' };
-      } else {
-        url = API_BASE;
-        fetchOpts = {
-          method: 'POST',
-          redirect: 'follow',
-          headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
-          body: JSON.stringify(paramsOrBody)
-        };
-      }
-      var controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
-      if (controller) fetchOpts.signal = controller.signal;
-      var timer = controller ? setTimeout(function() { controller.abort(); }, API_TIMEOUT_MS) : null;
-      return fetch(url, fetchOpts)
-        .then(function(res) {
-          if (timer) clearTimeout(timer);
-          return res.json();
-        })
-        .catch(function(err) {
-          if (timer) clearTimeout(timer);
-          if (attempt < API_RETRY_MAX) {
-            return new Promise(function(resolve) {
-              setTimeout(function() { resolve(_gasRequest(method, paramsOrBody, attempt + 1)); }, 800 * (attempt + 1));
-            });
-          }
-          return { error: (err && err.message) ? err.message : '接続エラーが発生しました。' };
-        });
+    // JSONP helpers
+    var _jid = 0;
+    function _jsonp(url, cb) {
+      var n = '_gcb_' + (++_jid);
+      var done = false;
+      window[n] = function(d) {
+        if (done) return;
+        done = true;
+        clearTimeout(timer);
+        delete window[n];
+        var el = document.getElementById(n);
+        if (el) el.remove();
+        cb(d);
+      };
+      var s = document.createElement('script'); s.id = n; s.src = url + '&callback=' + n;
+      s.onerror = function() {
+        if (done) return;
+        done = true;
+        clearTimeout(timer);
+        delete window[n]; s.remove();
+        cb({error:'接続エラー'});
+      };
+      // 15秒タイムアウト
+      var timer = setTimeout(function() {
+        if (done) return;
+        done = true;
+        delete window[n];
+        var el = document.getElementById(n);
+        if (el) el.remove();
+        cb({error:'タイムアウト: サーバーの応答が遅いです。再度お試しください。'});
+      }, 15000);
+      document.body.appendChild(s);
     }
 
     function doLogin() {
@@ -772,7 +758,8 @@
       btn.disabled = true;
       document.getElementById('loginError').style.display = 'none';
 
-      _gasRequest('POST', { action: 'adminLogin', password: pw }).then(function(data) {
+      var payload = encodeURIComponent(JSON.stringify({action:'adminLogin', password:pw}));
+      _jsonp(API_BASE + '?payload=' + payload, function(data) {
         btn.textContent = 'ログイン';
         btn.disabled = false;
         if (data.error) {
@@ -849,16 +836,19 @@
     }
 
     function apiGet(action, extra) {
-      var params = { action: action, adminToken: adminToken };
-      if (extra) {
-        var sp = new URLSearchParams(extra.replace(/^[?&]/, ''));
-        sp.forEach(function(v, k) { params[k] = v; });
-      }
-      return _gasRequest('GET', params);
+      var url = API_BASE + '?action=' + action + '&adminToken=' + adminToken + (extra||'');
+      return { then: function(handler) {
+        _jsonp(url, function(data) { handler(data); });
+        return { catch: function(){} };
+      }};
     }
     function apiPost(body) {
       body.adminToken = adminToken;
-      return _gasRequest('POST', body);
+      var payload = encodeURIComponent(JSON.stringify(body));
+      return { then: function(handler) {
+        _jsonp(API_BASE + '?payload=' + payload, function(data) { handler(data); });
+        return { catch: function(){} };
+      }};
     }
 
     // ===== DASHBOARD (Weekly Schedule) =====
@@ -866,7 +856,7 @@
     var weekReservations = [];
     var currentDetailResv = null;
 
-    function changeWeek(delta) { weekOffset += delta; loadDashboard(); }
+    function changeWeek(delta) { weekOffset = (Number(weekOffset) || 0) + delta; loadDashboard(); }
 
     /** データ変更後のリフレッシュ（キャッシュクリア付き） */
     function refreshDashboard() {
@@ -876,6 +866,7 @@
     }
 
     function getWeekDates(offset) {
+      offset = Number(offset) || 0;  // undefined/NaN を 0 として扱う（NaN防止）
       var now = new Date();
       var day = now.getDay(); // 0=Sun
       var monday = new Date(now);
@@ -1204,22 +1195,7 @@
     }
 
     // ===== MODALS =====
-    function resetCreateForm() {
-      document.getElementById('mName').value = '';
-      document.getElementById('mEmail').value = '';
-      document.getElementById('mPhone').value = '';
-      document.getElementById('mMenu').selectedIndex = 0;
-      document.getElementById('mDate').value = '';
-      document.getElementById('mSkipNotify').checked = false;
-    }
-
-    function openCreateModal(preDate, preTime) {
-      resetCreateForm();
-      initTimeSelects();
-      if (preDate) document.getElementById('mDate').value = preDate;
-      if (preTime) document.getElementById('mTime').value = preTime;
-      document.getElementById('createModal').classList.add('show');
-    }
+    function openCreateModal(){initTimeSelects();document.getElementById('createModal').classList.add('show');}
     function openBulkModal(){initTimeSelects();document.getElementById('bulkModal').classList.add('show');}
     function openRecurringModal(){initTimeSelects();document.getElementById('recurringModal').classList.add('show');}
     function openClosureModal(){document.getElementById('closureModal').classList.add('show');}
@@ -1310,24 +1286,16 @@
     }
 
     function submitRecurring() {
-      var btn = document.querySelector('#recurringModal .btn-primary');
-      if (btn.disabled) return;
-      btn.disabled = true;
-      btn.textContent = '登録中...';
-
       var body = {
         action:'adminCreateRecurring',
         customer_name: document.getElementById('rName').value,
         customer_email: document.getElementById('rEmail').value,
         customer_phone: document.getElementById('rPhone').value,
-        corporate_name: document.getElementById('rCorpName').value,
         menu: document.getElementById('rMenu').value,
         day_of_week: parseInt(document.getElementById('rDay').value),
         start_time: document.getElementById('rTime').value
       };
       apiPost(body).then(function(data){
-        btn.disabled = false;
-        btn.textContent = '登録して予約を生成';
         if(data.error){alert(data.error);return;}
         closeModal('recurringModal');
         alert('繰り返し予約を登録し、' + data.generated + '件の予約を自動生成しました。');
@@ -1336,12 +1304,9 @@
     }
 
     function stopRecurring(seriesId) {
-      if(!confirm('この繰り返し予約を停止しますか？\n今日以降の予約がキャンセルされ、カレンダーからも削除されます。'))return;
+      if(!confirm('この繰り返し予約を停止しますか？\n既に生成された予約はそのまま残ります。'))return;
       apiPost({action:'adminStopRecurring', series_id:seriesId}).then(function(data){
         if(data.error){alert(data.error);return;}
-        var msg = '繰り返し予約を停止しました。';
-        if(data.cancelled > 0) msg += '\n' + data.cancelled + '件の予約をキャンセルしカレンダーから削除しました。';
-        alert(msg);
         loadRecurring();
       });
     }
@@ -1544,20 +1509,6 @@
             refreshDashboard();
           });
         });
-
-        // 空セルクリックで新規予約モーダルを開く
-        cell.addEventListener('click', function(e) {
-          if (e.target !== cell) return; // 既存の予約ブロックをクリックした場合は無視
-          if (dragData) return;          // ドラッグ中は無視
-          var dayIdx = parseInt(cell.dataset.day);
-          var hour = parseInt(cell.dataset.hour);
-          if (isNaN(dayIdx) || isNaN(hour)) return;
-          var dates = getWeekDates(weekOffset);
-          if (!dates[dayIdx]) return;
-          var preDate = fmtD(dates[dayIdx]);
-          var preTime = ('0' + hour).slice(-2) + ':00';
-          openCreateModal(preDate, preTime);
-        });
       });
     }
 
@@ -1681,6 +1632,14 @@
         html += '</tbody></table>';
         document.getElementById('historyContent').innerHTML = html;
       });
+    }
+
+    // ===== 自動ログイン（保存済みトークン）=====
+    // すべての変数・関数が初期化された後にここで実行することで、
+    // weekOffset が未初期化（undefined）のまま showAdmin → loadDashboard が
+    // 走って日付が NaN になる不具合を防ぐ。
+    if (adminToken) {
+      showAdmin();
     }
   </script>
 </body>
