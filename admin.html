@@ -858,11 +858,18 @@
 
     function changeWeek(delta) { weekOffset = (Number(weekOffset) || 0) + delta; loadDashboard(); }
 
-    /** データ変更後のリフレッシュ（キャッシュクリア付き） */
+    /** データ変更後のリフレッシュ（キャッシュクリア付き・先読みは抑制） */
     function refreshDashboard() {
       clearDashCache();
-      loadDashboard();
+      loadDashboard(true);   // 操作直後は先読みを止めて画面更新を優先（渋滞防止）
       loadTodayBadge();
+    }
+
+    // カレンダー同期を投げっぱなしで実行（応答を待たない）。
+    // 登録/キャンセルの確認を出したあとに呼び、カレンダー作成・削除を裏で行う。
+    function syncCalendarAsync(id) {
+      if (!id) return;
+      try { apiPost({ action: 'adminSyncCalendar', id: id }); } catch(e) {}
     }
 
     // ===== ダッシュボードの予約キャッシュ（localStorage = タブを閉じても残る）=====
@@ -945,7 +952,7 @@
       });
     }
 
-    function loadDashboard() {
+    function loadDashboard(skipPrefetch) {
       var baseOffset = Number(weekOffset) || 0;
       var dates = getWeekDates(baseOffset);
       var todayStr = fmtD(new Date());
@@ -989,9 +996,12 @@
 
           // 前後の週を先読みしておく → 次に「前週／翌週」を押すと即表示
           // 翌週方向に2週、前週方向に1週ぶん先読み（連続して翌週を押しても待たない）
-          prefetchWeek(baseOffset + 1);
-          prefetchWeek(baseOffset + 2);
-          prefetchWeek(baseOffset - 1);
+          // ただし操作直後（skipPrefetch）は渋滞防止のため先読みしない
+          if (!skipPrefetch) {
+            prefetchWeek(baseOffset + 1);
+            prefetchWeek(baseOffset + 2);
+            prefetchWeek(baseOffset - 1);
+          }
         });
       }
       fetchData();
@@ -1138,11 +1148,13 @@
         menu: r.menu,
         date: nextDate,
         start_time: nextTime,
-        skip_notify: true
+        skip_notify: true,
+        defer_calendar: true
       }).then(function(data) {
         if (data.error) { alert(data.error); return; }
         alert('次回予約を作成しました');
         closeModal('detailModal');
+        syncCalendarAsync(data.id);   // カレンダー作成は裏で
         refreshDashboard();
       });
     }
@@ -1150,14 +1162,17 @@
     function cancelFromDetail() {
       if (!currentDetailResv) return;
       if (!confirm(currentDetailResv.customer_name + 'の予約をキャンセルしますか？\n（通知メールは送信されません）')) return;
+      var cid = currentDetailResv.id;
       apiPost({
         action: 'adminCancelReservation',
-        id: currentDetailResv.id,
-        skip_notify: true
+        id: cid,
+        skip_notify: true,
+        defer_calendar: true
       }).then(function(data) {
         if (data.error) { alert(data.error); return; }
         alert('キャンセルしました');
         closeModal('detailModal');
+        syncCalendarAsync(cid);   // カレンダー削除は裏で
         refreshDashboard();
       });
     }
@@ -1234,8 +1249,9 @@
 
     function cancelResv(id) {
       if (!confirm('この予約をキャンセルしますか？')) return;
-      apiPost({action:'adminCancelReservation', id:id, skip_notify:true}).then(function(data){
+      apiPost({action:'adminCancelReservation', id:id, skip_notify:true, defer_calendar:true}).then(function(data){
         if(data.error) { alert(data.error); return; }
+        syncCalendarAsync(id);   // カレンダー削除は裏で
         refreshDashboard(); loadReservations();
       });
     }
@@ -1256,11 +1272,13 @@
         menu: document.getElementById('mMenu').value,
         date: document.getElementById('mDate').value,
         start_time: document.getElementById('mTime').value,
-        skip_notify: document.getElementById('mSkipNotify').checked
+        skip_notify: document.getElementById('mSkipNotify').checked,
+        defer_calendar: true
       };
       apiPost(body).then(function(data){
         if(data.error){alert(data.error);return;}
         closeModal('createModal');
+        syncCalendarAsync(data.id);   // カレンダー作成は裏で
         refreshDashboard(); loadReservations();
       });
     }
