@@ -1152,10 +1152,11 @@
         defer_calendar: true
       }).then(function(data) {
         if (data.error) { alert(data.error); return; }
-        alert('次回予約を作成しました');
+        // alertの前にカレンダー作成と画面更新を先に投げる（OK待ちで止まる前に送信）
+        syncCalendarAsync(data.id);   // カレンダー作成を即送信（裏で実行）
         closeModal('detailModal');
-        syncCalendarAsync(data.id);   // カレンダー作成は裏で
         refreshDashboard();
+        alert('次回予約を作成しました');
       });
     }
 
@@ -1170,10 +1171,12 @@
         defer_calendar: true
       }).then(function(data) {
         if (data.error) { alert(data.error); return; }
-        alert('キャンセルしました');
+        // ★alert（ユーザーがOKを押すまでJSが止まる）の前に、カレンダー削除と画面更新を先に投げる。
+        //   こうしないと、OKを押すまでカレンダー削除リクエストが送信されない。
+        syncCalendarAsync(cid);   // カレンダー削除を即送信（裏で実行）
         closeModal('detailModal');
-        syncCalendarAsync(cid);   // カレンダー削除は裏で
         refreshDashboard();
+        alert('キャンセルしました');
       });
     }
 
@@ -1251,7 +1254,7 @@
       if (!confirm('この予約をキャンセルしますか？')) return;
       apiPost({action:'adminCancelReservation', id:id, skip_notify:true, defer_calendar:true}).then(function(data){
         if(data.error) { alert(data.error); return; }
-        syncCalendarAsync(id);   // カレンダー削除は裏で
+        syncCalendarAsync(id);   // カレンダー削除を即送信（裏で実行）
         refreshDashboard(); loadReservations();
       });
     }
