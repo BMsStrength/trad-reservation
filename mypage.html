@@ -1,0 +1,429 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate">
+  <title>マイページ | TRAD パーソナルコンディショニングジム</title>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700;900&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --brand-blue: #0B3D91;
+      --brand-blue-light: #1565C0;
+      --brand-blue-pale: #E3F2FD;
+      --white: #FFFFFF;
+      --gray-50: #FAFAFA;
+      --gray-100: #F5F5F5;
+      --gray-200: #EEEEEE;
+      --gray-300: #E0E0E0;
+      --gray-500: #9E9E9E;
+      --gray-600: #757575;
+      --gray-700: #616161;
+      --gray-900: #212121;
+      --success: #2E7D32;
+      --danger: #C62828;
+      --radius: 12px;
+      --radius-sm: 8px;
+      --shadow: 0 2px 8px rgba(0,0,0,0.08);
+    }
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body {
+      font-family: 'Noto Sans JP', sans-serif;
+      background: var(--gray-50);
+      color: var(--gray-900);
+      min-height: 100vh;
+    }
+    .header {
+      background: var(--brand-blue);
+      color: var(--white);
+      padding: 16px 20px;
+      text-align: center;
+    }
+    .header-brand { font-size:24px; font-weight:900; letter-spacing:4px; }
+    .header-sub { font-size:11px; opacity:0.85; letter-spacing:2px; margin-top:2px; }
+    .container { max-width:480px; margin:0 auto; padding:20px 16px 40px; }
+
+    .card {
+      background: var(--white);
+      border-radius: var(--radius);
+      padding: 20px;
+      box-shadow: var(--shadow);
+      margin-bottom: 16px;
+    }
+    .card-title { font-size:15px; font-weight:700; margin-bottom:12px; display:flex; align-items:center; justify-content:space-between; }
+
+    .greeting { font-size:16px; font-weight:700; margin-bottom:16px; }
+    .greeting small { display:block; font-size:12px; font-weight:400; color:var(--gray-600); margin-top:2px; }
+
+    /* 回数券 */
+    .ticket-card {
+      background: linear-gradient(135deg, var(--brand-blue) 0%, var(--brand-blue-light) 100%);
+      color: var(--white);
+      border-radius: var(--radius);
+      padding: 20px;
+      margin-bottom: 16px;
+      box-shadow: var(--shadow);
+    }
+    .ticket-label { font-size:12px; opacity:0.85; letter-spacing:1px; }
+    .ticket-remain { font-size:40px; font-weight:900; line-height:1.2; }
+    .ticket-remain small { font-size:16px; font-weight:700; }
+    .ticket-meta { font-size:12px; opacity:0.85; margin-top:6px; }
+
+    /* 予約アイテム */
+    .resv-item { border:1px solid var(--gray-200); border-radius:var(--radius-sm); padding:14px; margin-bottom:10px; }
+    .resv-item:last-child { margin-bottom:0; }
+    .resv-date { font-size:15px; font-weight:700; }
+    .resv-menu { font-size:13px; color:var(--gray-600); margin-top:2px; }
+    .resv-actions { display:flex; gap:8px; margin-top:10px; }
+    .resv-note { font-size:11px; color:var(--gray-500); margin-top:8px; }
+    .badge-recurring {
+      display:inline-block; font-size:10px; font-weight:700; padding:2px 8px; border-radius:10px;
+      background:#FFF3E0; color:#E65100; margin-left:6px; vertical-align:middle;
+    }
+
+    .past-item { display:flex; justify-content:space-between; padding:10px 2px; border-bottom:1px solid var(--gray-100); font-size:13px; }
+    .past-item:last-child { border-bottom:none; }
+    .past-date { font-weight:500; }
+    .past-menu { color:var(--gray-600); }
+
+    .btn {
+      padding:10px 14px; border:none; border-radius:var(--radius-sm);
+      font-size:13px; font-weight:700; font-family:inherit; cursor:pointer;
+    }
+    .btn-block { width:100%; padding:14px; font-size:15px; }
+    .btn-primary { background:var(--brand-blue); color:var(--white); }
+    .btn-primary:hover { background:#0A337A; }
+    .btn-outline { background:var(--white); color:var(--gray-700); border:1.5px solid var(--gray-300); }
+    .btn-outline-danger { background:var(--white); color:var(--danger); border:1.5px solid #FFCDD2; }
+    .btn:disabled { opacity:0.5; cursor:default; }
+
+    .input {
+      width:100%; padding:12px; border:1px solid var(--gray-300); border-radius:var(--radius-sm);
+      font-size:15px; font-family:inherit; margin-bottom:12px;
+    }
+    .input-label { font-size:13px; font-weight:600; display:block; margin-bottom:4px; }
+
+    .msg { padding:14px 16px; border-radius:var(--radius-sm); font-size:13px; margin-bottom:14px; }
+    .msg-error { background:#FFEBEE; color:var(--danger); }
+    .msg-success { background:#E8F5E9; color:var(--success); }
+    .msg-info { background:var(--brand-blue-pale); color:var(--brand-blue); }
+
+    .empty { text-align:center; color:var(--gray-500); font-size:13px; padding:14px 0; }
+
+    .loading { text-align:center; padding:60px 20px; color:var(--gray-500); font-size:13px; }
+    .spinner { width:32px; height:32px; border:3px solid var(--gray-200); border-top-color:var(--brand-blue); border-radius:50%; animation:spin 0.8s linear infinite; margin:0 auto 12px; }
+    @keyframes spin { to { transform:rotate(360deg); } }
+
+    .footer-link { text-align:center; margin-top:20px; }
+    .footer-link a, .footer-link button {
+      background:none; border:none; color:var(--gray-500); font-size:12px; text-decoration:underline;
+      cursor:pointer; font-family:inherit;
+    }
+    .toggle-past { background:none; border:none; color:var(--brand-blue); font-size:12px; font-weight:700; cursor:pointer; font-family:inherit; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div class="header-brand">TRAD<span style="font-size:10px;vertical-align:super;">™</span></div>
+    <div class="header-sub">MY PAGE</div>
+  </div>
+
+  <div class="container">
+    <div id="content">
+      <div class="loading">
+        <div class="spinner"></div>
+        読み込んでいます...
+      </div>
+    </div>
+  </div>
+
+  <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+  <script>
+    // LINE DevelopersのLIFFアプリのID（チャネル: TRADマイページ）
+    var LIFF_ID = '2010638065-5NakTfBo';
+
+    var API_BASE = 'https://script.google.com/macros/s/AKfycbxzphUXhjAEwxFsj6napghnfRZh7R7p15L_iDfKwM9p56wdRrDsIbQrXzggFdqjgihY/exec';
+    var API_TIMEOUT_MS = 25000;
+    var API_RETRY_MAX = 2;
+    var SESSION_KEY = 'trad_mypage_session';
+
+    function gasPost(body, cb, attempt) {
+      attempt = attempt || 0;
+      var controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+      var opts = {
+        method: 'POST',
+        redirect: 'follow',
+        headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
+        body: JSON.stringify(body)
+      };
+      if (controller) opts.signal = controller.signal;
+      var timer = controller ? setTimeout(function() { controller.abort(); }, API_TIMEOUT_MS) : null;
+      fetch(API_BASE, opts)
+        .then(function(res) { if (timer) clearTimeout(timer); return res.json(); })
+        .then(function(data) { cb(null, data); })
+        .catch(function(err) {
+          if (timer) clearTimeout(timer);
+          if (attempt < API_RETRY_MAX) {
+            setTimeout(function() { gasPost(body, cb, attempt + 1); }, 800 * (attempt + 1));
+            return;
+          }
+          cb(err, null);
+        });
+    }
+
+    var $c = document.getElementById('content');
+    function esc(s) {
+      return String(s == null ? '' : s).replace(/[&<>"']/g, function(m) {
+        return { '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[m];
+      });
+    }
+    function showLoading(text) {
+      $c.innerHTML = '<div class="loading"><div class="spinner"></div>' + esc(text || '読み込んでいます...') + '</div>';
+    }
+    function showError(text, retryFn) {
+      $c.innerHTML = '<div class="msg msg-error">' + esc(text) + '</div>' +
+        (retryFn ? '<button class="btn btn-primary btn-block" id="retryBtn">再読み込み</button>' : '');
+      if (retryFn) document.getElementById('retryBtn').onclick = retryFn;
+    }
+
+    // ---------- 起動フロー ----------
+    function boot() {
+      liff.init({ liffId: LIFF_ID })
+        .then(function() {
+          if (!liff.isLoggedIn()) {
+            liff.login({ redirectUri: window.location.href });
+            return;
+          }
+          var session = localStorage.getItem(SESSION_KEY);
+          if (session) {
+            loadData(session);
+          } else {
+            doLogin();
+          }
+        })
+        .catch(function(err) {
+          showError('LINEログインの初期化に失敗しました。LINEアプリから開き直してください。（' + (err && err.message || err) + '）');
+        });
+    }
+
+    function doLogin() {
+      var idToken = liff.getIDToken();
+      if (!idToken) {
+        // IDトークン期限切れ等 → 再ログイン
+        liff.logout();
+        liff.login({ redirectUri: window.location.href });
+        return;
+      }
+      showLoading('ログインしています...');
+      gasPost({ action: 'mypageLogin', id_token: idToken }, function(err, data) {
+        if (err || !data) { showError('接続エラーが発生しました。', boot); return; }
+        if (data.error) { showError(data.error, boot); return; }
+        if (data.need_link) { renderLinkForm(); return; }
+        localStorage.setItem(SESSION_KEY, data.sessionToken);
+        loadData(data.sessionToken);
+      });
+    }
+
+    // ---------- 初回のメール認証（LINEアカウント紐づけ） ----------
+    function renderLinkForm() {
+      $c.innerHTML =
+        '<div class="card">' +
+          '<div class="card-title">はじめまして</div>' +
+          '<div class="msg msg-info">初回のみ、ご予約時にお使いのメールアドレスの確認をお願いします。次回からはLINEを開くだけでログインできます。</div>' +
+          '<label class="input-label">メールアドレス</label>' +
+          '<input type="email" class="input" id="linkEmail" placeholder="taro@example.com" autocomplete="email">' +
+          '<button class="btn btn-primary btn-block" id="sendCodeBtn">認証コードを送信</button>' +
+          '<div id="codeArea" style="display:none;margin-top:16px;">' +
+            '<label class="input-label">認証コード（メールに届いた6桁の数字）</label>' +
+            '<input type="text" class="input" id="linkCode" inputmode="numeric" maxlength="6" placeholder="123456">' +
+            '<button class="btn btn-primary btn-block" id="verifyBtn">確認してログイン</button>' +
+          '</div>' +
+          '<div id="linkMsg"></div>' +
+        '</div>';
+
+      document.getElementById('sendCodeBtn').onclick = sendCode;
+      document.getElementById('verifyBtn').onclick = verifyCode;
+    }
+
+    function setLinkMsg(text, cls) {
+      document.getElementById('linkMsg').innerHTML =
+        text ? '<div class="msg ' + cls + '" style="margin-top:12px;margin-bottom:0;">' + esc(text) + '</div>' : '';
+    }
+
+    function sendCode() {
+      var email = document.getElementById('linkEmail').value.trim();
+      if (!email) { setLinkMsg('メールアドレスを入力してください。', 'msg-error'); return; }
+      var btn = document.getElementById('sendCodeBtn');
+      btn.disabled = true; btn.textContent = '送信中...';
+      gasPost({ action: 'mypageRequestLink', id_token: liff.getIDToken(), email: email }, function(err, data) {
+        btn.disabled = false; btn.textContent = '認証コードを再送する';
+        if (err || !data) { setLinkMsg('接続エラーが発生しました。', 'msg-error'); return; }
+        if (data.error) { setLinkMsg(data.error, 'msg-error'); return; }
+        document.getElementById('codeArea').style.display = 'block';
+        setLinkMsg('認証コードをメールに送信しました。届かない場合は迷惑メールフォルダもご確認ください。', 'msg-success');
+      });
+    }
+
+    function verifyCode() {
+      var email = document.getElementById('linkEmail').value.trim();
+      var code = document.getElementById('linkCode').value.trim();
+      if (!code) { setLinkMsg('認証コードを入力してください。', 'msg-error'); return; }
+      var btn = document.getElementById('verifyBtn');
+      btn.disabled = true; btn.textContent = '確認中...';
+      gasPost({ action: 'mypageVerifyLink', id_token: liff.getIDToken(), email: email, code: code }, function(err, data) {
+        btn.disabled = false; btn.textContent = '確認してログイン';
+        if (err || !data) { setLinkMsg('接続エラーが発生しました。', 'msg-error'); return; }
+        if (data.error) { setLinkMsg(data.error, 'msg-error'); return; }
+        localStorage.setItem(SESSION_KEY, data.sessionToken);
+        loadData(data.sessionToken);
+      });
+    }
+
+    // ---------- データ取得・表示 ----------
+    var currentData = null;
+
+    function loadData(sessionToken) {
+      showLoading();
+      gasPost({ action: 'mypageGetData', sessionToken: sessionToken }, function(err, data) {
+        if (err || !data) { showError('接続エラーが発生しました。', function() { loadData(sessionToken); }); return; }
+        if (data.need_login) {
+          localStorage.removeItem(SESSION_KEY);
+          doLogin();
+          return;
+        }
+        if (data.error) { showError(data.error, function() { loadData(sessionToken); }); return; }
+        currentData = data;
+        renderMyPage(data);
+      });
+    }
+
+    function fmtDateJa(dateStr) {
+      var d = new Date(dateStr + 'T00:00:00');
+      if (isNaN(d.getTime())) return dateStr;
+      var dayNames = ['日','月','火','水','木','金','土'];
+      return (d.getMonth() + 1) + '月' + d.getDate() + '日（' + dayNames[d.getDay()] + '）';
+    }
+
+    function renderMyPage(data) {
+      var html = '<div class="greeting">' + esc(data.member.display_name) + ' さん' +
+        '<small>マイページへようこそ</small></div>';
+
+      // 回数券
+      if (data.tickets && data.tickets.available) {
+        data.tickets.items.forEach(function(t) {
+          html += '<div class="ticket-card">' +
+            '<div class="ticket-label">' + esc(t.type || '回数券') + '</div>' +
+            '<div class="ticket-remain">残り ' + (isNaN(t.remain) ? '-' : esc(t.remain)) + '<small> 回</small></div>' +
+            '<div class="ticket-meta">' +
+              (t.total ? '全' + esc(t.total) + '回' : '') +
+              (t.purchase_date ? '（購入日 ' + esc(t.purchase_date) + '）' : '') +
+            '</div>' +
+          '</div>';
+        });
+      }
+
+      // 今後の予約
+      html += '<div class="card"><div class="card-title">今後のご予約</div>';
+      if (!data.upcoming || data.upcoming.length === 0) {
+        html += '<div class="empty">今後のご予約はありません。</div>';
+      } else {
+        data.upcoming.forEach(function(r, idx) {
+          html += '<div class="resv-item">' +
+            '<div class="resv-date">' + fmtDateJa(r.date) + ' ' + esc(r.start_time) + '〜' + esc(r.end_time) +
+              (r.is_recurring ? '<span class="badge-recurring">繰り返し</span>' : '') +
+            '</div>' +
+            '<div class="resv-menu">' + esc(r.menu) + '（' + esc(r.duration_min) + '分）</div>';
+          if (r.is_recurring) {
+            html += '<div class="resv-note">繰り返し予約の変更・キャンセルはジムに直接ご連絡ください。</div>';
+          } else if (r.can_modify && r.cancel_token) {
+            html += '<div class="resv-actions">' +
+              '<button class="btn btn-outline" onclick="goChange(' + idx + ')">日時を変更</button>' +
+              '<button class="btn btn-outline-danger" onclick="doCancel(' + idx + ')">キャンセル</button>' +
+            '</div>' +
+            '<div class="resv-note">前日23:59まで変更・キャンセルできます。</div>';
+          } else {
+            html += '<div class="resv-note">変更・キャンセル期限（前日23:59）を過ぎています。ご都合が悪い場合は直接ご連絡ください。</div>';
+          }
+          html += '</div>';
+        });
+      }
+      html += '</div>';
+
+      // 予約を追加
+      html += '<a href="index.html" style="text-decoration:none;"><button class="btn btn-primary btn-block" style="margin-bottom:16px;">新しく予約する</button></a>';
+
+      // 過去の予約
+      html += '<div class="card"><div class="card-title">過去のご予約' +
+        (data.past_total ? '<span style="font-size:12px;color:var(--gray-500);font-weight:400;">全' + esc(data.past_total) + '回</span>' : '') +
+        '</div>';
+      if (!data.past || data.past.length === 0) {
+        html += '<div class="empty">過去のご予約はまだありません。</div>';
+      } else {
+        var visible = data.past.slice(0, 5);
+        var hidden = data.past.slice(5);
+        html += '<div id="pastVisible">';
+        visible.forEach(function(r) {
+          html += '<div class="past-item"><span class="past-date">' + esc(r.date) + ' ' + esc(r.start_time) + '</span>' +
+            '<span class="past-menu">' + esc(r.menu) + '</span></div>';
+        });
+        html += '</div>';
+        if (hidden.length > 0) {
+          html += '<div id="pastHidden" style="display:none;">';
+          hidden.forEach(function(r) {
+            html += '<div class="past-item"><span class="past-date">' + esc(r.date) + ' ' + esc(r.start_time) + '</span>' +
+              '<span class="past-menu">' + esc(r.menu) + '</span></div>';
+          });
+          html += '</div>' +
+            '<div style="text-align:center;margin-top:8px;">' +
+              '<button class="toggle-past" id="togglePastBtn">もっと見る</button>' +
+            '</div>';
+        }
+      }
+      html += '</div>';
+
+      html += '<div class="footer-link"><button id="logoutBtn">ログアウト</button></div>';
+
+      $c.innerHTML = html;
+
+      var toggleBtn = document.getElementById('togglePastBtn');
+      if (toggleBtn) {
+        toggleBtn.onclick = function() {
+          var hiddenDiv = document.getElementById('pastHidden');
+          var show = hiddenDiv.style.display === 'none';
+          hiddenDiv.style.display = show ? 'block' : 'none';
+          toggleBtn.textContent = show ? '閉じる' : 'もっと見る';
+        };
+      }
+      document.getElementById('logoutBtn').onclick = function() {
+        localStorage.removeItem(SESSION_KEY);
+        try { liff.logout(); } catch (e) {}
+        window.location.reload();
+      };
+    }
+
+    // ---------- 予約の変更・キャンセル ----------
+    function goChange(idx) {
+      var r = currentData.upcoming[idx];
+      if (!r || !r.cancel_token) return;
+      window.location.href = 'manage.html?token=' + encodeURIComponent(r.cancel_token);
+    }
+
+    function doCancel(idx) {
+      var r = currentData.upcoming[idx];
+      if (!r || !r.cancel_token) return;
+      if (!confirm(fmtDateJa(r.date) + ' ' + r.start_time + ' の予約をキャンセルしますか？')) return;
+
+      showLoading('キャンセルしています...');
+      gasPost({ action: 'cancelReservation', token: r.cancel_token }, function(err, data) {
+        if (err || !data) { showError('接続エラーが発生しました。', function() { loadData(localStorage.getItem(SESSION_KEY)); }); return; }
+        if (data.error) {
+          alert(data.error);
+        }
+        loadData(localStorage.getItem(SESSION_KEY));
+      });
+    }
+
+    boot();
+  </script>
+</body>
+</html>
