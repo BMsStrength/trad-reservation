@@ -146,6 +146,22 @@
     var API_TIMEOUT_MS = 25000;
     var API_RETRY_MAX = 2;
     var SESSION_KEY = 'trad_mypage_session';
+    var CACHE_KEY = 'trad_mypage_cache';
+
+    function readCache() {
+      try {
+        var raw = localStorage.getItem(CACHE_KEY);
+        if (!raw) return null;
+        var c = JSON.parse(raw);
+        return (c && c.data && c.data.member) ? c.data : null;
+      } catch (e) { return null; }
+    }
+    function writeCache(data) {
+      try { localStorage.setItem(CACHE_KEY, JSON.stringify({ t: Date.now(), data: data })); } catch (e) {}
+    }
+    function clearCache() {
+      try { localStorage.removeItem(CACHE_KEY); } catch (e) {}
+    }
 
     function gasPost(body, cb, attempt) {
       attempt = attempt || 0;
@@ -196,7 +212,13 @@
           }
           var session = localStorage.getItem(SESSION_KEY);
           if (session) {
-            loadData(session);
+            // 前回の内容を即表示し、裏で最新に更新（体感速度対策）
+            var cached = readCache();
+            if (cached) {
+              currentData = cached;
+              renderMyPage(cached, true);
+            }
+            loadData(session, !!cached);
           } else {
             doLogin();
           }
@@ -220,7 +242,14 @@
         if (data.error) { showError(data.error, boot); return; }
         if (data.need_link) { renderLinkForm(); return; }
         localStorage.setItem(SESSION_KEY, data.sessionToken);
-        loadData(data.sessionToken);
+        if (data.upcoming) {
+          // ログイン応答にデータ同梱済み（1往復で表示）
+          currentData = data;
+          writeCache(data);
+          renderMyPage(data);
+        } else {
+          loadData(data.sessionToken);
+        }
       });
     }
 
@@ -275,24 +304,40 @@
         if (err || !data) { setLinkMsg('接続エラーが発生しました。', 'msg-error'); return; }
         if (data.error) { setLinkMsg(data.error, 'msg-error'); return; }
         localStorage.setItem(SESSION_KEY, data.sessionToken);
-        loadData(data.sessionToken);
+        if (data.upcoming) {
+          currentData = data;
+          writeCache(data);
+          renderMyPage(data);
+        } else {
+          loadData(data.sessionToken);
+        }
       });
     }
 
     // ---------- データ取得・表示 ----------
     var currentData = null;
 
-    function loadData(sessionToken) {
-      showLoading();
+    function loadData(sessionToken, silent) {
+      if (!silent) showLoading();
       gasPost({ action: 'mypageGetData', sessionToken: sessionToken }, function(err, data) {
-        if (err || !data) { showError('接続エラーが発生しました。', function() { loadData(sessionToken); }); return; }
+        if (err || !data) {
+          if (silent) return; // キャッシュ表示中なら静かに諦める（次回また更新）
+          showError('接続エラーが発生しました。', function() { loadData(sessionToken); });
+          return;
+        }
         if (data.need_login) {
           localStorage.removeItem(SESSION_KEY);
+          clearCache();
           doLogin();
           return;
         }
-        if (data.error) { showError(data.error, function() { loadData(sessionToken); }); return; }
+        if (data.error) {
+          if (silent) return;
+          showError(data.error, function() { loadData(sessionToken); });
+          return;
+        }
         currentData = data;
+        writeCache(data);
         renderMyPage(data);
       });
     }
@@ -304,15 +349,20 @@
       return (d.getMonth() + 1) + '月' + d.getDate() + '日（' + dayNames[d.getDay()] + '）';
     }
 
-    function renderMyPage(data) {
-      var html = '<div class="greeting">' + esc(data.member.display_name) + ' さん' +
+    function renderMyPage(data, isStale) {
+      var html = '';
+      if (isStale) {
+        html += '<div style="text-align:center;font-size:11px;color:var(--gray-500);margin-bottom:10px;">最新の情報を確認しています...</div>';
+      }
+      html += '<div class="greeting">' + esc(data.member.display_name) + ' さん' +
         '<small>マイページへようこそ</small></div>';
 
-      // 回数券
+      // 回数券（本人分と、ペア共用分は分けて表示）
       if (data.tickets && data.tickets.available) {
         data.tickets.items.forEach(function(t) {
-          html += '<div class="ticket-card">' +
-            '<div class="ticket-label">' + esc(t.type || '回数券') + '</div>' +
+          var label = esc(t.type || '回数券') + (t.pair ? '（ペア共用）' : '');
+          html += '<div class="ticket-card"' + (t.pair ? ' style="background:linear-gradient(135deg,#4A2E91 0%,#6A4CBF 100%);"' : '') + '>' +
+            '<div class="ticket-label">' + label + '</div>' +
             '<div class="ticket-remain">残り ' + (isNaN(t.remain) ? '-' : esc(t.remain)) + '<small> 回</small></div>' +
             '<div class="ticket-meta">' +
               (t.total ? '全' + esc(t.total) + '回' : '') +
@@ -398,6 +448,7 @@
       }
       document.getElementById('logoutBtn').onclick = function() {
         localStorage.removeItem(SESSION_KEY);
+        clearCache();
         try { liff.logout(); } catch (e) {}
         window.location.reload();
       };
