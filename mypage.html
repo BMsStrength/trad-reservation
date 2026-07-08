@@ -333,7 +333,9 @@
               (r.is_recurring ? '<span class="badge-recurring">繰り返し</span>' : '') +
             '</div>' +
             '<div class="resv-menu">' + esc(r.menu) + '（' + esc(r.duration_min) + '分）</div>';
-          if (r.is_recurring) {
+          if (r.is_calendar) {
+            html += '<div class="resv-note">この予約の変更・キャンセルはジムに直接ご連絡ください。</div>';
+          } else if (r.is_recurring) {
             html += '<div class="resv-note">繰り返し予約の変更・キャンセルはジムに直接ご連絡ください。</div>';
           } else if (r.can_modify && r.cancel_token) {
             html += '<div class="resv-actions">' +
