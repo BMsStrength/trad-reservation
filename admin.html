@@ -650,6 +650,44 @@
     </div>
   </div>
 
+  <!-- Recurring Edit Modal -->
+  <div class="modal-overlay" id="editRecurringModal">
+    <div class="modal">
+      <div class="modal-title">繰り返し予約を変更</div>
+      <p style="font-size:12px;color:var(--gray-600);margin-bottom:16px;">適用開始日以降の予約を新しい内容で作り直します。適用開始日より前の予約はそのまま残ります。</p>
+      <div class="form-row">
+        <div class="form-group"><label class="form-label">お客様名</label><input class="form-input" id="eName" readonly style="background:#F5F5F5;"></div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label class="form-label">メニュー</label>
+          <select class="form-select" id="eMenu">
+            <option value="パーソナルトレーニング">パーソナルトレーニング（60分）</option>
+            <option value="ペアトレーニング">ペアトレーニング（60分）</option>
+            <option value="メンテナンス">メンテナンス（30分）</option>
+            <option value="無料体験">無料体験（90分）</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label class="form-label">曜日</label>
+          <select class="form-select" id="eDay">
+            <option value="0">日曜日</option><option value="1">月曜日</option>
+            <option value="3">水曜日</option><option value="4">木曜日</option>
+            <option value="5">金曜日</option><option value="6">土曜日</option>
+          </select>
+        </div>
+        <div class="form-group"><label class="form-label">開始時刻</label><select class="form-select" id="eTime"></select></div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label class="form-label">適用開始日（この日以降の予約を変更）</label><input class="form-input" type="date" id="eFrom"></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-outline" onclick="closeModal('editRecurringModal')">キャンセル</button>
+        <button class="btn btn-primary" id="editRecurringSubmitBtn" onclick="submitEditRecurring()">変更して予約を作り直す</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Closure Modal -->
   <div class="modal-overlay" id="closureModal">
     <div class="modal">
@@ -1323,6 +1361,7 @@
     }
 
     // ===== RECURRING =====
+    var recurringCache = {};
     function loadRecurring() {
       apiGet('adminGetRecurring').then(function(data){
         if(data.error) return;
@@ -1342,10 +1381,13 @@
           uniqueRows.push(r);
         });
 
+        recurringCache = {};
         var html='';
         uniqueRows.forEach(function(r){
+          recurringCache[r.series_id] = r;
           var badge = r.active ? '<span class="badge badge-active">有効</span>' : '<span class="badge badge-inactive">停止</span>';
-          var actions = r.active ? '<button class="btn btn-danger btn-sm" onclick="stopRecurring(\'' + r.series_id + '\')">停止</button> ' +
+          var actions = r.active ? '<button class="btn btn-primary btn-sm" onclick="openEditRecurringModal(\'' + r.series_id + '\')">編集</button> ' +
+            '<button class="btn btn-danger btn-sm" onclick="stopRecurring(\'' + r.series_id + '\')">停止</button> ' +
             '<button class="btn btn-outline btn-sm" onclick="bulkCancelRecurring(\'' + r.series_id + '\',\'' + escapeHtml(r.customer_name).replace(/'/g,"\\'") + '\')">月一括取消</button>' : '';
           var info = escapeHtml(r.customer_name) + '　' + escapeHtml(dayNames[Number(r.day_of_week)] || '-') + '曜日　' + escapeHtml(fmtTimeSafe(r.start_time));
           html += '<tr><td>' + info + '</td><td>' + badge + '</td><td>' + actions + '</td></tr>';
@@ -1369,6 +1411,56 @@
         closeModal('recurringModal');
         alert('繰り返し予約を登録し、' + data.generated + '件の予約を自動生成しました。');
         loadRecurring();
+      });
+    }
+
+    var editingRecurringId = null;
+    function openEditRecurringModal(seriesId) {
+      var r = recurringCache[seriesId];
+      if (!r) { alert('繰り返し予約の情報を取得できませんでした。一覧を再読み込みしてください。'); return; }
+      editingRecurringId = seriesId;
+      populateTimeSelect('eTime');
+      document.getElementById('eName').value = r.customer_name || '';
+      document.getElementById('eMenu').value = r.menu || 'パーソナルトレーニング';
+      document.getElementById('eDay').value = String(Number(r.day_of_week));
+      var eT = document.getElementById('eTime');
+      var tv = fmtTimeSafe(r.start_time);
+      eT.value = tv;
+      if (tv && eT.value !== tv) { // 選択肢にない時刻は追加してから選択
+        var o = document.createElement('option'); o.value = tv; o.textContent = tv;
+        eT.appendChild(o); eT.value = tv;
+      }
+      var t = new Date();
+      var todayStr = t.getFullYear() + '-' + ('0'+(t.getMonth()+1)).slice(-2) + '-' + ('0'+t.getDate()).slice(-2);
+      var eF = document.getElementById('eFrom');
+      eF.value = todayStr;
+      eF.min = todayStr;
+      document.getElementById('editRecurringModal').classList.add('show');
+    }
+
+    function submitEditRecurring() {
+      if (!editingRecurringId) return;
+      var btn = document.getElementById('editRecurringSubmitBtn');
+      if (btn && btn.disabled) return;
+      var from = document.getElementById('eFrom').value;
+      if (!from) { alert('適用開始日を選択してください。'); return; }
+      if (!confirm(from + ' 以降のこの繰り返し予約を削除し、新しい内容で作り直します。よろしいですか？\n（' + from + ' より前の予約はそのまま残ります）')) return;
+      if (btn) { btn.disabled = true; btn.textContent = '変更中…'; }
+      apiPost({
+        action: 'adminUpdateRecurring',
+        series_id: editingRecurringId,
+        menu: document.getElementById('eMenu').value,
+        day_of_week: parseInt(document.getElementById('eDay').value),
+        start_time: document.getElementById('eTime').value,
+        effective_from: from
+      }).then(function(data){
+        if (btn) { btn.disabled = false; btn.textContent = '変更して予約を作り直す'; }
+        if (data.error) { alert(data.error); return; }
+        closeModal('editRecurringModal');
+        alert('繰り返し予約を変更しました。\n削除した予約: ' + data.deleted + '件 / 新しく作成した予約: ' + data.generated + '件');
+        loadRecurring();
+        refreshDashboard();
+        loadReservations();
       });
     }
 
