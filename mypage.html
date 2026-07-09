@@ -258,7 +258,9 @@
       $c.innerHTML =
         '<div class="card">' +
           '<div class="card-title">はじめまして</div>' +
-          '<div class="msg msg-info">初回のみ、ご予約時にお使いのメールアドレスの確認をお願いします。次回からはLINEを開くだけでログインできます。</div>' +
+          '<div class="msg msg-info">初回のみ、お名前とご予約時にお使いのメールアドレスの確認をお願いします。次回からはLINEを開くだけでログインできます。</div>' +
+          '<label class="input-label">お名前（フルネーム）</label>' +
+          '<input type="text" class="input" id="linkName" placeholder="例）山田 太郎" autocomplete="name">' +
           '<label class="input-label">メールアドレス</label>' +
           '<input type="email" class="input" id="linkEmail" placeholder="taro@example.com" autocomplete="email">' +
           '<button class="btn btn-primary btn-block" id="sendCodeBtn">認証コードを送信</button>' +
@@ -280,7 +282,9 @@
     }
 
     function sendCode() {
+      var name = document.getElementById('linkName').value.trim();
       var email = document.getElementById('linkEmail').value.trim();
+      if (!name) { setLinkMsg('お名前（フルネーム）を入力してください。', 'msg-error'); return; }
       if (!email) { setLinkMsg('メールアドレスを入力してください。', 'msg-error'); return; }
       var btn = document.getElementById('sendCodeBtn');
       btn.disabled = true; btn.textContent = '送信中...';
@@ -294,12 +298,14 @@
     }
 
     function verifyCode() {
+      var name = document.getElementById('linkName').value.trim();
       var email = document.getElementById('linkEmail').value.trim();
       var code = document.getElementById('linkCode').value.trim();
+      if (!name) { setLinkMsg('お名前（フルネーム）を入力してください。', 'msg-error'); return; }
       if (!code) { setLinkMsg('認証コードを入力してください。', 'msg-error'); return; }
       var btn = document.getElementById('verifyBtn');
       btn.disabled = true; btn.textContent = '確認中...';
-      gasPost({ action: 'mypageVerifyLink', id_token: liff.getIDToken(), email: email, code: code }, function(err, data) {
+      gasPost({ action: 'mypageVerifyLink', id_token: liff.getIDToken(), email: email, code: code, full_name: name }, function(err, data) {
         btn.disabled = false; btn.textContent = '確認してログイン';
         if (err || !data) { setLinkMsg('接続エラーが発生しました。', 'msg-error'); return; }
         if (data.error) { setLinkMsg(data.error, 'msg-error'); return; }
