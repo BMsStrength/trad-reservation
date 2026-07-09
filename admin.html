@@ -654,7 +654,7 @@
   <div class="modal-overlay" id="editRecurringModal">
     <div class="modal">
       <div class="modal-title">繰り返し予約を変更</div>
-      <p style="font-size:12px;color:var(--gray-600);margin-bottom:16px;">適用開始日以降の予約を新しい内容で作り直します。適用開始日より前の予約はそのまま残ります。</p>
+      <p style="font-size:12px;color:var(--gray-600);margin-bottom:16px;">適用開始日以降の予約を新しい内容で作り直します。適用開始日より前の予約はそのまま残ります。カレンダー予定の作り直しを含むため、完了まで1分ほどかかることがあります。画面を閉じずにお待ちください。</p>
       <div class="form-row">
         <div class="form-group"><label class="form-label">お客様名</label><input class="form-input" id="eName" readonly style="background:#F5F5F5;"></div>
       </div>
@@ -756,7 +756,7 @@
 
     // JSONP helpers
     var _jid = 0;
-    function _jsonp(url, cb) {
+    function _jsonp(url, cb, timeoutMs) {
       var n = '_gcb_' + (++_jid);
       var done = false;
       window[n] = function(d) {
@@ -776,7 +776,7 @@
         delete window[n]; s.remove();
         cb({error:'接続エラー'});
       };
-      // 15秒タイムアウト
+      // タイムアウト（既定15秒・カレンダー操作を伴う重い処理は呼び出し側で延長）
       var timer = setTimeout(function() {
         if (done) return;
         done = true;
@@ -784,7 +784,7 @@
         var el = document.getElementById(n);
         if (el) el.remove();
         cb({error:'タイムアウト: サーバーの応答が遅いです。再度お試しください。'});
-      }, 15000);
+      }, timeoutMs || 15000);
       document.body.appendChild(s);
     }
 
@@ -880,11 +880,14 @@
         return { catch: function(){} };
       }};
     }
+    // 予約の一括生成・削除＋カレンダー予定の作成・削除を伴うアクションは数十秒かかるため延長
+    var HEAVY_ACTIONS = { adminUpdateRecurring: 1, adminCreateRecurring: 1, adminStopRecurring: 1, adminBulkCancelRecurring: 1, adminBulkCreate: 1 };
     function apiPost(body) {
       body.adminToken = adminToken;
+      var timeoutMs = HEAVY_ACTIONS[body.action] ? 180000 : 15000;
       var payload = encodeURIComponent(JSON.stringify(body));
       return { then: function(handler) {
-        _jsonp(API_BASE + '?payload=' + payload, function(data) { handler(data); });
+        _jsonp(API_BASE + '?payload=' + payload, function(data) { handler(data); }, timeoutMs);
         return { catch: function(){} };
       }};
     }
