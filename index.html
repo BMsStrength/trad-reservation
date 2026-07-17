@@ -621,8 +621,11 @@
     var API_RETRY_MAX = 2;
 
     // ===== fetch ベース API（CORS対応・ブラウザ拡張問題を回避）=====
-    function gasRequest(method, paramsOrBody, cb, attempt) {
+    function gasRequest(method, paramsOrBody, cb, attempt, opts) {
       attempt = attempt || 0;
+      opts = opts || {};
+      var timeoutMs = opts.timeoutMs || API_TIMEOUT_MS;
+      var retryMax = (opts.retryMax != null) ? opts.retryMax : API_RETRY_MAX;
       var url, fetchOpts;
 
       if (method === 'GET') {
@@ -646,7 +649,8 @@
 
       var controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
       if (controller) fetchOpts.signal = controller.signal;
-      var timer = controller ? setTimeout(function() { controller.abort(); }, API_TIMEOUT_MS) : null;
+      var timedOut = false;
+      var timer = controller ? setTimeout(function() { timedOut = true; controller.abort(); }, timeoutMs) : null;
 
       fetch(url, fetchOpts)
         .then(function(res) {
@@ -658,18 +662,18 @@
         })
         .catch(function(err) {
           if (timer) clearTimeout(timer);
-          if (attempt < API_RETRY_MAX) {
-            setTimeout(function() { gasRequest(method, paramsOrBody, cb, attempt + 1); }, 800 * (attempt + 1));
+          if (attempt < retryMax) {
+            setTimeout(function() { gasRequest(method, paramsOrBody, cb, attempt + 1, opts); }, 800 * (attempt + 1));
             return;
           }
-          cb(err, null);
+          cb(err, null, timedOut);
         });
     }
     function gasGet(params, cb) {
       gasRequest('GET', params, cb);
     }
-    function gasPost(body, cb) {
-      gasRequest('POST', body, cb);
+    function gasPost(body, cb, opts) {
+      gasRequest('POST', body, cb, 0, opts);
     }
 
     // ===== STATE =====
@@ -964,14 +968,18 @@
       var email = document.getElementById('inputEmail').value.trim();
       var phone = document.getElementById('inputPhone').value.trim();
       var notes = document.getElementById('inputNotes').value.trim();
-      var completed = 0, errors = [];
+      var completed = 0, errors = [], hadTimeout = false;
 
       function submitNext(idx) {
         if (idx >= cart.length) {
           hideLoading();
           if (errors.length) {
             document.getElementById('btnSubmit').disabled = false;
-            showError(errors.join('\n'));
+            var emsg = errors.join('\n');
+            if (hadTimeout) {
+              emsg += '\n' + '※通信がタイムアウトした場合でも、予約が完了していることがあります。確認メールが届いていればその予約は完了しています（再度の操作は不要です）。メールが届いていない場合のみ、もう一度お試しください。';
+            }
+            showError(emsg);
             return;
           }
           // All success
@@ -997,12 +1005,17 @@
           customer_name: name, customer_email: email, customer_phone: phone,
           notes: notes,
           menu: item.menu, date: item.date, start_time: item.time
-        }, function(err, data) {
+        }, function(err, data, timedOut) {
           if (err || !data || data.error) {
-            errors.push((item.date + ' ' + item.time + ': ' + ((data && data.error) || '接続エラー')));
+            if (timedOut) {
+              hadTimeout = true;
+              errors.push(item.date + ' ' + item.time + ': 通信がタイムアウトしました');
+            } else {
+              errors.push(item.date + ' ' + item.time + ': ' + ((data && data.error) || '接続エラー'));
+            }
           }
           submitNext(idx + 1);
-        });
+        }, { timeoutMs: 60000, retryMax: 0 });
       }
       submitNext(0);
     }

@@ -104,8 +104,11 @@
     var API_RETRY_MAX = 2;
 
     // fetch-based API helpers
-    function gasRequest(method, paramsOrBody, cb, attempt) {
+    function gasRequest(method, paramsOrBody, cb, attempt, opts) {
       attempt = attempt || 0;
+      opts = opts || {};
+      var timeoutMs = opts.timeoutMs || API_TIMEOUT_MS;
+      var retryMax = (opts.retryMax != null) ? opts.retryMax : API_RETRY_MAX;
       var url, fetchOpts;
       if (method === 'GET') {
         var q = Object.keys(paramsOrBody || {}).filter(function(k) {
@@ -127,7 +130,8 @@
       }
       var controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
       if (controller) fetchOpts.signal = controller.signal;
-      var timer = controller ? setTimeout(function() { controller.abort(); }, API_TIMEOUT_MS) : null;
+      var timedOut = false;
+      var timer = controller ? setTimeout(function() { timedOut = true; controller.abort(); }, timeoutMs) : null;
       fetch(url, fetchOpts)
         .then(function(res) {
           if (timer) clearTimeout(timer);
@@ -136,15 +140,15 @@
         .then(function(data) { cb(null, data); })
         .catch(function(err) {
           if (timer) clearTimeout(timer);
-          if (attempt < API_RETRY_MAX) {
-            setTimeout(function() { gasRequest(method, paramsOrBody, cb, attempt + 1); }, 800 * (attempt + 1));
+          if (attempt < retryMax) {
+            setTimeout(function() { gasRequest(method, paramsOrBody, cb, attempt + 1, opts); }, 800 * (attempt + 1));
             return;
           }
-          cb(err, null);
+          cb(err, null, timedOut);
         });
     }
     function gasGet(params, cb) { gasRequest('GET', params, cb); }
-    function gasPost(body, cb) { gasRequest('POST', body, cb); }
+    function gasPost(body, cb, opts) { gasRequest('POST', body, cb, 0, opts); }
 
     var token = new URLSearchParams(window.location.search).get('token');
 
@@ -249,14 +253,15 @@
       var btn = document.querySelector('button[onclick="submitChange()"]');
       if (btn) { btn.disabled = true; btn.textContent = '変更中...'; }
 
-      gasPost({ action: 'changeReservation', token: token, new_date: newDate, new_start_time: newTime }, function(err, data) {
+      gasPost({ action: 'changeReservation', token: token, new_date: newDate, new_start_time: newTime }, function(err, data, timedOut) {
         if (btn) { btn.disabled = false; btn.textContent = '予約を変更する'; }
+        if (timedOut) { alert('通信がタイムアウトしました。変更が完了している場合は確認メールが届いています。メールをご確認のうえ、届いていない場合のみもう一度お試しください。'); return; }
         if (err || !data) { alert('接続エラーが発生しました。'); return; }
         if (data.error) { alert(data.error); return; }
         document.getElementById('content').innerHTML =
           '<div class="msg msg-success">予約を変更しました。</div>' +
           '<p style="text-align:center;margin-top:12px;color:var(--gray-600);font-size:14px;">変更確認メールをお送りしました。</p>';
-      });
+      }, { timeoutMs: 60000, retryMax: 0 });
     }
 
     function cancelReservation() {
@@ -265,14 +270,15 @@
       var btn = document.querySelector('button[onclick="cancelReservation()"]');
       if (btn) { btn.disabled = true; btn.textContent = 'キャンセル中...'; }
 
-      gasPost({ action: 'cancelReservation', token: token }, function(err, data) {
+      gasPost({ action: 'cancelReservation', token: token }, function(err, data, timedOut) {
         if (btn) { btn.disabled = false; btn.textContent = 'この予約をキャンセル'; }
+        if (timedOut) { alert('通信がタイムアウトしました。キャンセルが完了している場合はキャンセル完了メールが届いています。メールをご確認のうえ、届いていない場合のみもう一度お試しください。'); return; }
         if (err || !data) { alert('接続エラーが発生しました。'); return; }
         if (data.error) { alert(data.error); return; }
         document.getElementById('content').innerHTML =
           '<div class="msg msg-success">予約をキャンセルしました。</div>' +
           '<p style="text-align:center;margin-top:12px;color:var(--gray-600);font-size:14px;">またのご利用をお待ちしております。</p>';
-      });
+      }, { timeoutMs: 60000, retryMax: 0 });
     }
   </script>
 </body>

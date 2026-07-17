@@ -163,8 +163,11 @@
       try { localStorage.removeItem(CACHE_KEY); } catch (e) {}
     }
 
-    function gasPost(body, cb, attempt) {
+    function gasPost(body, cb, reqOpts, attempt) {
       attempt = attempt || 0;
+      reqOpts = reqOpts || {};
+      var timeoutMs = reqOpts.timeoutMs || API_TIMEOUT_MS;
+      var retryMax = (reqOpts.retryMax != null) ? reqOpts.retryMax : API_RETRY_MAX;
       var controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
       var opts = {
         method: 'POST',
@@ -173,17 +176,18 @@
         body: JSON.stringify(body)
       };
       if (controller) opts.signal = controller.signal;
-      var timer = controller ? setTimeout(function() { controller.abort(); }, API_TIMEOUT_MS) : null;
+      var timedOut = false;
+      var timer = controller ? setTimeout(function() { timedOut = true; controller.abort(); }, timeoutMs) : null;
       fetch(API_BASE, opts)
         .then(function(res) { if (timer) clearTimeout(timer); return res.json(); })
         .then(function(data) { cb(null, data); })
         .catch(function(err) {
           if (timer) clearTimeout(timer);
-          if (attempt < API_RETRY_MAX) {
-            setTimeout(function() { gasPost(body, cb, attempt + 1); }, 800 * (attempt + 1));
+          if (attempt < retryMax) {
+            setTimeout(function() { gasPost(body, cb, reqOpts, attempt + 1); }, 800 * (attempt + 1));
             return;
           }
-          cb(err, null);
+          cb(err, null, timedOut);
         });
     }
 
@@ -473,13 +477,18 @@
       if (!confirm(fmtDateJa(r.date) + ' ' + r.start_time + ' の予約をキャンセルしますか？')) return;
 
       showLoading('キャンセルしています...');
-      gasPost({ action: 'cancelReservation', token: r.cancel_token }, function(err, data) {
+      gasPost({ action: 'cancelReservation', token: r.cancel_token }, function(err, data, timedOut) {
+        if (timedOut) {
+          alert('通信がタイムアウトしました。キャンセルが完了している場合はキャンセル完了メールが届いています。最新の予約状況を確認します。');
+          loadData(localStorage.getItem(SESSION_KEY));
+          return;
+        }
         if (err || !data) { showError('接続エラーが発生しました。', function() { loadData(localStorage.getItem(SESSION_KEY)); }); return; }
         if (data.error) {
           alert(data.error);
         }
         loadData(localStorage.getItem(SESSION_KEY));
-      });
+      }, { timeoutMs: 60000, retryMax: 0 });
     }
 
     boot();
