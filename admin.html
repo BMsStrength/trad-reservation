@@ -325,6 +325,7 @@
         <div class="modal">
           <div class="modal-title">予約詳細</div>
           <div id="detailContent"></div>
+          <button class="btn btn-outline btn-sm" id="detResendBtn" onclick="resendFromDetail()" style="margin-top:6px;">確認メールを再送</button>
           <hr style="margin:16px 0;border:none;border-top:1px solid var(--gray-200);">
 
           <div class="modal-title" style="font-size:14px;">予約変更</div>
@@ -1224,6 +1225,23 @@
       });
     }
 
+    function resendFromDetail() {
+      if (!currentDetailResv) return;
+      resendConfirmation(currentDetailResv.id, currentDetailResv.customer_name, currentDetailResv.customer_email, 'detResendBtn');
+    }
+
+    function resendConfirmation(id, name, email, btnId) {
+      if (!email) { alert('この予約にはメールアドレスが登録されていません。'); return; }
+      if (!confirm(name + ' 様（' + email + '）に予約確定メールを再送しますか？')) return;
+      var btn = btnId ? document.getElementById(btnId) : null;
+      if (btn) { if (btn.disabled) return; btn.disabled = true; btn.textContent = '送信中…'; }
+      apiPost({ action: 'adminResendConfirmation', id: id }).then(function(data) {
+        if (btn) { btn.disabled = false; btn.textContent = '確認メールを再送'; }
+        if (data.error) { alert(data.error); return; }
+        alert('確認メールを再送しました。\n送信先: ' + (data.sent_to || email));
+      });
+    }
+
     function cancelFromDetail() {
       if (!currentDetailResv) return;
       if (!confirm(currentDetailResv.customer_name + 'の予約をキャンセルしますか？\n（通知メールは送信されません）')) return;
@@ -1307,11 +1325,23 @@
       var html = '';
       rows.forEach(function(r) {
         var badge = r.status === 'confirmed' ? '<span class="badge badge-confirmed">確定</span>' : '<span class="badge badge-cancelled">取消</span>';
-        var actions = r.status === 'confirmed' ? '<button class="btn btn-danger btn-sm" onclick="cancelResv(\'' + r.id + '\')">取消</button>' : '';
+        var actions = r.status === 'confirmed'
+          ? '<button class="btn btn-outline btn-sm" onclick="resendResvRow(\'' + r.id + '\')" title="予約確定メールを再送">メール再送</button> ' +
+            '<button class="btn btn-danger btn-sm" onclick="cancelResv(\'' + r.id + '\')">取消</button>'
+          : '';
         html += '<tr><td>' + escapeHtml(r.date) + '</td><td>' + escapeHtml(fmtTimeSafe(r.start_time)) + '〜' + escapeHtml(fmtTimeSafe(r.end_time)) + '</td>' +
           '<td>' + escapeHtml(r.customer_name) + '</td><td>' + escapeHtml(r.menu) + '</td><td>' + badge + '</td><td>' + actions + '</td></tr>';
       });
       tbody.innerHTML = html;
+    }
+
+    function resendResvRow(id) {
+      var r = null;
+      for (var i = 0; i < _resvData.length; i++) {
+        if (String(_resvData[i].id) === String(id)) { r = _resvData[i]; break; }
+      }
+      if (!r) { alert('予約データを再読み込みしてください。'); return; }
+      resendConfirmation(r.id, r.customer_name, r.customer_email, null);
     }
 
     function cancelResv(id) {
