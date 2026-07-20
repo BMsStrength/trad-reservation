@@ -1588,9 +1588,9 @@
       document.getElementById('custEditModal').classList.add('show');
     }
 
-    function submitCustomerEdit() {
+    function submitCustomerEdit(mergeConfirmed) {
       var btn = document.getElementById('ceSaveBtn');
-      if (btn.disabled) return;
+      if (btn.disabled && !mergeConfirmed) return;
       var name = document.getElementById('ceName').value.trim();
       var email = document.getElementById('ceEmail').value.trim();
       if (!name) { alert('お名前は必須です。'); return; }
@@ -1602,12 +1602,20 @@
         name: name,
         email: email,
         phone: document.getElementById('cePhone').value.trim(),
-        propagate: document.getElementById('cePropagate').checked
+        propagate: document.getElementById('cePropagate').checked,
+        merge: mergeConfirmed === true
       }).then(function(data) {
         btn.disabled = false; btn.textContent = '保存';
+        if (data.needs_merge) {
+          var ok = confirm('同じメールアドレスの顧客「' + (data.merge_with || '') + '」が既に存在します。\n\n同一人物の重複登録の場合は「OK」を押すと1人に統合します。\n（この行は削除され、既存の「' + (data.merge_with || '') + '」に名前・電話・メモが引き継がれます）');
+          if (ok) submitCustomerEdit(true);
+          return;
+        }
         if (data.error) { alert(data.error); return; }
         closeModal('custEditModal');
-        var msg = '顧客情報を更新しました。';
+        var msg = data.merged
+          ? '重複していた顧客を「' + (data.merge_with || '') + '」に統合しました。'
+          : '顧客情報を更新しました。';
         if (data.updated_reservations > 0 || data.updated_recurring > 0) {
           msg += '\n今日以降の予約 ' + (data.updated_reservations || 0) + '件・繰り返し設定 ' + (data.updated_recurring || 0) + '件にも反映しました。';
         }
