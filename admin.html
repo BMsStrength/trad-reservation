@@ -466,9 +466,31 @@
           <div class="card-title">顧客一覧</div>
           <div class="table-wrap">
             <table>
-              <thead><tr><th>名前</th><th>メール</th><th>電話</th><th>来店回数</th><th>最終来店</th><th>メモ</th></tr></thead>
+              <thead><tr><th>名前</th><th>メール</th><th>電話</th><th>来店回数</th><th>最終来店</th><th>メモ</th><th></th></tr></thead>
               <tbody id="customerTableBody"></tbody>
             </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- Customer Edit Modal -->
+      <div class="modal-overlay" id="custEditModal">
+        <div class="modal">
+          <div class="modal-title">顧客情報を編集</div>
+          <div class="form-group"><label class="form-label">お名前</label><input class="form-input" id="ceName"></div>
+          <div class="form-group"><label class="form-label">メールアドレス</label><input class="form-input" type="email" id="ceEmail" placeholder="例: example@gmail.com"></div>
+          <div class="form-group"><label class="form-label">電話番号</label><input class="form-input" id="cePhone"></div>
+          <label style="display:flex;align-items:center;gap:6px;font-size:13px;margin:10px 0 4px;cursor:pointer;">
+            <input type="checkbox" id="cePropagate" checked>
+            <span>今日以降の予約・繰り返し予約にも新しい情報を反映する</span>
+          </label>
+          <div style="font-size:11px;color:var(--gray-500);line-height:1.6;">
+            メールアドレスを修正すると、以後のリマインド・確認メールは新しいアドレスに届きます。<br>
+            すでに送信済み（送信失敗）の確認メールは自動では再送されません。
+          </div>
+          <div class="modal-footer">
+            <button class="btn btn-outline" onclick="closeModal('custEditModal')">キャンセル</button>
+            <button class="btn btn-primary" id="ceSaveBtn" onclick="submitCustomerEdit()">保存</button>
           </div>
         </div>
       </div>
@@ -881,7 +903,7 @@
       }};
     }
     // 予約の一括生成・削除＋カレンダー予定の作成・削除を伴うアクションは数十秒かかるため延長
-    var HEAVY_ACTIONS = { adminUpdateRecurring: 1, adminCreateRecurring: 1, adminStopRecurring: 1, adminBulkCancelRecurring: 1, adminBulkCreate: 1 };
+    var HEAVY_ACTIONS = { adminUpdateRecurring: 1, adminCreateRecurring: 1, adminStopRecurring: 1, adminBulkCancelRecurring: 1, adminBulkCreate: 1, adminUpdateCustomer: 1 };
     function apiPost(body) {
       body.adminToken = adminToken;
       var timeoutMs = HEAVY_ACTIONS[body.action] ? 180000 : 15000;
@@ -1522,14 +1544,18 @@
     }
 
     // ===== CUSTOMERS (with stats) =====
+    var _custById = {};
+    var _custEditingId = '';
     function loadCustomers() {
       apiGet('adminGetCustomerStats').then(function(data){
         if(data.error) return;
         var tbody = document.getElementById('customerTableBody');
         var rows = data.customers||[];
-        if(rows.length===0){tbody.innerHTML='<tr><td colspan="6" style="text-align:center;color:var(--gray-500);">顧客がいません</td></tr>';return;}
+        if(rows.length===0){tbody.innerHTML='<tr><td colspan="7" style="text-align:center;color:var(--gray-500);">顧客がいません</td></tr>';return;}
+        _custById = {};
         var html='';
         rows.forEach(function(c){
+          _custById[String(c.id)] = c;
           var safeName = escapeHtml(c.name);
           var jsName = (c.name||'').replace(/\\/g,'\\\\').replace(/'/g,"\\'");
           html += '<tr>' +
@@ -1538,7 +1564,8 @@
             '<td style="text-align:center;font-weight:700;">' + (c.visit_count || 0) + '回</td>' +
             '<td>' + (c.last_visit || '-') + '</td>' +
             '<td><input class="form-input" style="padding:4px 6px;font-size:11px;min-width:80px;" value="' + (c.notes||'').replace(/"/g,'&quot;') + '" ' +
-            'onchange="saveCustomerNotes(\'' + c.id + '\',this.value)" placeholder="メモ"></td></tr>';
+            'onchange="saveCustomerNotes(\'' + c.id + '\',this.value)" placeholder="メモ"></td>' +
+            '<td><button class="btn btn-outline btn-sm" onclick="openCustomerEdit(\'' + c.id + '\')">編集</button></td></tr>';
         });
         tbody.innerHTML=html;
       });
@@ -1547,6 +1574,45 @@
     function saveCustomerNotes(customerId, notes) {
       apiPost({ action: 'adminUpdateCustomerNotes', customer_id: customerId, notes: notes }).then(function(data) {
         if (data.error) alert(data.error);
+      });
+    }
+
+    function openCustomerEdit(customerId) {
+      var c = _custById[String(customerId)];
+      if (!c) { alert('顧客データを再読み込みしてください。'); return; }
+      _custEditingId = String(customerId);
+      document.getElementById('ceName').value = c.name || '';
+      document.getElementById('ceEmail').value = c.email || '';
+      document.getElementById('cePhone').value = c.phone || '';
+      document.getElementById('cePropagate').checked = true;
+      document.getElementById('custEditModal').classList.add('show');
+    }
+
+    function submitCustomerEdit() {
+      var btn = document.getElementById('ceSaveBtn');
+      if (btn.disabled) return;
+      var name = document.getElementById('ceName').value.trim();
+      var email = document.getElementById('ceEmail').value.trim();
+      if (!name) { alert('お名前は必須です。'); return; }
+      if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { alert('メールアドレスの形式が正しくありません。'); return; }
+      btn.disabled = true; btn.textContent = '保存中…';
+      apiPost({
+        action: 'adminUpdateCustomer',
+        customer_id: _custEditingId,
+        name: name,
+        email: email,
+        phone: document.getElementById('cePhone').value.trim(),
+        propagate: document.getElementById('cePropagate').checked
+      }).then(function(data) {
+        btn.disabled = false; btn.textContent = '保存';
+        if (data.error) { alert(data.error); return; }
+        closeModal('custEditModal');
+        var msg = '顧客情報を更新しました。';
+        if (data.updated_reservations > 0 || data.updated_recurring > 0) {
+          msg += '\n今日以降の予約 ' + (data.updated_reservations || 0) + '件・繰り返し設定 ' + (data.updated_recurring || 0) + '件にも反映しました。';
+        }
+        alert(msg);
+        loadCustomers();
       });
     }
 
