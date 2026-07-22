@@ -550,6 +550,36 @@
         <input class="form-input" type="tel" id="inputPhone" placeholder="例：090-1234-5678" autocomplete="tel">
       </div>
 
+      <!-- 無料体験がカートにある時だけ表示（goToStep(3)で切替） -->
+      <div id="taikenExtra" style="display:none;">
+        <div class="form-group">
+          <label class="form-label">トレーニングの目的<span class="required">必須</span></label>
+          <select class="form-input" id="inputPurpose">
+            <option value="">選択してください</option>
+            <option>ダイエット・ボディメイク</option>
+            <option>腰痛・肩こりなど不調の改善</option>
+            <option>姿勢の改善</option>
+            <option>体力づくり・健康維持</option>
+            <option>筋力アップ</option>
+            <option>スポーツのパフォーマンス向上</option>
+            <option>その他</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">年代<span class="required">必須</span></label>
+          <select class="form-input" id="inputAgeGroup">
+            <option value="">選択してください</option>
+            <option>10代</option>
+            <option>20代</option>
+            <option>30代</option>
+            <option>40代</option>
+            <option>50代</option>
+            <option>60代</option>
+            <option>70代以上</option>
+          </select>
+        </div>
+      </div>
+
       <div class="form-group">
         <label class="form-label">備考</label>
         <textarea class="form-input" id="inputNotes" rows="3" placeholder="ご要望・連絡事項などがあればご記入ください" style="resize:vertical;"></textarea>
@@ -690,6 +720,8 @@
     // ・localStorageにも保存し、再訪時は前回の空き状況を即描画してから裏で最新化
     // ・多少古い表示でも、予約確定時はGAS側が必ず空きを再検証するため事故にならない
     var slotStore = {};
+    var bootstrapDone = false;      // ライブの getBootstrap を適用済みか
+    var settingsSource = 'none';    // 'fallback' | 'cache' | 'static' | 'live'
     var slotsInFlight = {}; // 二重取得防止: key -> [完了時コールバック]
     var SLOTS_PAINT_TTL = 3 * 60 * 1000; // これ以内の古さなら即描画に使う
     var SLOTS_FRESH_TTL = 45 * 1000;     // これより古ければ描画後に裏で更新
@@ -737,9 +769,11 @@
     }
     // getBootstrap の圧縮形式（{c:1}=休業 / {o:[空き時刻], x:[埋まり時刻]}）を
     // slotStore の標準形式（{closed:true} / {slots:[{time,available}]}）に展開して格納
-    function applyBootstrapWeeks(weeks) {
-      var now = Date.now();
+    function applyBootstrapWeeks(weeks, tsOverride) {
+      var now = tsOverride || Date.now();
       for (var mn in weeks) {
+        // 手元により新しいデータがある場合は上書きしない（静的slots.jsonがライブ取得を巻き戻さないための保護）
+        if (slotStore[mn] && slotStore[mn].ts > now) continue;
         var src = weeks[mn], dates = {};
         for (var ds in src) {
           var v = src[ds] || {};
@@ -767,6 +801,8 @@
           if (!state.menus.length) loadSettings(silent);
           return;
         }
+        bootstrapDone = true;
+        settingsSource = 'live';
         applySettings(data.settings);
         try {
           data.settings._ts = Date.now();
@@ -777,6 +813,27 @@
         // ちょうど空き枠テーブルを見ていたら最新データで描き直す
         if (state.selectedMenu && document.getElementById('step2').classList.contains('active')) renderWeekFromStore();
       });
+    }
+
+    // 静的 slots.json の先行読み込み（GitHub PagesへGASが5分おきに書き出す・同一オリジンで約0.1秒）。
+    // 数分古い可能性があるが、直後に届く getBootstrap（ライブ）が必ず上書きするので表示専用として安全。
+    // ファイルが無い（未セットアップ・404）場合は静かにスキップして従来動作
+    function loadStaticSlots() {
+      var bust = Math.floor(Date.now() / 300000); // 5分刻みでURLを変えてCDNキャッシュの古すぎを防ぐ
+      fetch('slots.json?v=' + bust).then(function(r) {
+        if (!r.ok) throw new Error('no static');
+        return r.json();
+      }).then(function(d) {
+        if (!d || !d.weeks || bootstrapDone) return; // ライブが先に届いていたら何もしない
+        if (d.settings && settingsSource === 'fallback') {
+          applySettings(d.settings);
+          renderMenus();
+          settingsSource = 'static';
+        }
+        // 「1分前のデータ」として格納 → 即描画に使えるが、表示時のSWRで裏の最新化も走る
+        applyBootstrapWeeks(d.weeks, Date.now() - 60 * 1000);
+        if (state.selectedMenu && document.getElementById('step2').classList.contains('active')) renderWeekFromStore();
+      }).catch(function() {});
     }
 
     // ===== INIT with localStorage cache =====
@@ -820,9 +877,12 @@
 
       // メニュー画面は常に待ちゼロで表示する:
       // 保存済み設定があればそれ、なければHTML埋め込みの初期値で即描画し、
-      // 裏でブートストラップ（最新の設定＋全メニュー×全期間の空き枠）を取得して差し替える
-      applySettings(cached && cached.menus.length ? cached : FALLBACK_SETTINGS);
+      // ①静的slots.json（約0.1秒）→②ライブgetBootstrap（2〜3秒）の順に空き枠を差し替えていく
+      var hasCached = !!(cached && cached.menus.length);
+      settingsSource = hasCached ? 'cache' : 'fallback';
+      applySettings(hasCached ? cached : FALLBACK_SETTINGS);
       renderMenus();
+      loadStaticSlots();
       loadBootstrap(true);
     });
 
@@ -874,14 +934,37 @@
     }
 
     // ===== NAVIGATION =====
+    // カートに無料体験が入っているか（目的・年代の追加入力の表示条件）
+    function cartHasTaiken() {
+      return cart.some(function(c) { return c.menu === '無料体験'; });
+    }
+    // 無料体験の目的・年代を備考文字列の先頭に合成（確認画面表示・送信の両方で使用）
+    function buildNotesWithTaiken(notes) {
+      if (!cartHasTaiken()) return notes;
+      var p = document.getElementById('inputPurpose').value;
+      var a = document.getElementById('inputAgeGroup').value;
+      var head = [];
+      if (p) head.push('【目的】' + p);
+      if (a) head.push('【年代】' + a);
+      if (!head.length) return notes;
+      return head.join('／') + (notes ? '\n' + notes : '');
+    }
+
     function goToStep(step) {
       if (step === 3 && cart.length === 0) { showError('予約をカートに追加してください。'); return; }
+      if (step === 3) {
+        // 無料体験がカートにある時だけ目的・年代の入力欄を表示
+        document.getElementById('taikenExtra').style.display = cartHasTaiken() ? '' : 'none';
+      }
       if (step === 4) {
         var name = document.getElementById('inputName').value.trim();
         var email = document.getElementById('inputEmail').value.trim();
         var phone = document.getElementById('inputPhone').value.trim();
         if (!name || !email || !phone) { showError('すべての項目を入力してください。'); return; }
         if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { showError('メールアドレスの形式が正しくありません。'); return; }
+        if (cartHasTaiken() && (!document.getElementById('inputPurpose').value || !document.getElementById('inputAgeGroup').value)) {
+          showError('トレーニングの目的と年代を選択してください。'); return;
+        }
         // Build confirmation
         var html = '';
         cart.forEach(function(item, idx) {
@@ -896,7 +979,7 @@
         document.getElementById('confirmName').textContent = name;
         document.getElementById('confirmEmail').textContent = email;
         document.getElementById('confirmPhone').textContent = phone;
-        var notes = document.getElementById('inputNotes').value.trim();
+        var notes = buildNotesWithTaiken(document.getElementById('inputNotes').value.trim());
         var notesRow = document.getElementById('confirmNotesRow');
         if (notes) {
           document.getElementById('confirmNotes').textContent = notes;
@@ -1086,7 +1169,7 @@
       var name = document.getElementById('inputName').value.trim();
       var email = document.getElementById('inputEmail').value.trim();
       var phone = document.getElementById('inputPhone').value.trim();
-      var notes = document.getElementById('inputNotes').value.trim();
+      var notes = buildNotesWithTaiken(document.getElementById('inputNotes').value.trim());
       var completed = 0, errors = [], hadTimeout = false;
 
       function submitNext(idx) {
