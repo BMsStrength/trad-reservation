@@ -750,6 +750,14 @@
     // ===== INIT with localStorage cache =====
     var SETTINGS_TTL = 30 * 60 * 1000; // 設定キャッシュの有効期限: 30分
 
+    // ?nocache=1 付きで開くと保存済みキャッシュを全消去して完全な初回状態で起動する（動作確認用）
+    try {
+      if (/[?&]nocache=1/.test(location.search)) {
+        localStorage.removeItem('trad_settings');
+        localStorage.removeItem(SLOTS_LS_KEY);
+      }
+    } catch (e) {}
+
     document.addEventListener('DOMContentLoaded', function() {
       var cached = null;
       try {
