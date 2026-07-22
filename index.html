@@ -681,10 +681,71 @@
       menus: [], selectedMenu: null, closedDay: 2, bufferMin: 10, dailyMax: 10, bookableUntil: null
     };
     var cart = []; // [{menu, menuDuration, date, time}]
-    var slotCache = {};
     var weekPage = 0;
-    var lastSlotCacheMenu = null; // スロットキャッシュが有効なメニュー名
     var dayNames = ['日','月','火','水','木','金','土'];
+
+    // ===== 空き枠の先読みキャッシュ（SWR・2026-07-22 速度改善）=====
+    // slotStore[メニュー名] = { ts: 取得時刻, dates: { 'YYYY-MM-DD': {slots:[...]} | {closed:true} } }
+    // ・ページを開いた瞬間に全メニュー分を裏で先読み → メニュー選択時にカレンダーが即表示される
+    // ・localStorageにも保存し、再訪時は前回の空き状況を即描画してから裏で最新化
+    // ・多少古い表示でも、予約確定時はGAS側が必ず空きを再検証するため事故にならない
+    var slotStore = {};
+    var slotsInFlight = {}; // 二重取得防止: key -> [完了時コールバック]
+    var SLOTS_PAINT_TTL = 3 * 60 * 1000; // これ以内の古さなら即描画に使う
+    var SLOTS_FRESH_TTL = 45 * 1000;     // これより古ければ描画後に裏で更新
+    var SLOTS_LS_KEY = 'trad_slots_v1';
+
+    function loadSlotStore() {
+      try {
+        var raw = localStorage.getItem(SLOTS_LS_KEY);
+        if (!raw) return;
+        var parsed = JSON.parse(raw);
+        for (var mn in parsed) {
+          if (parsed[mn] && parsed[mn].ts && Date.now() - parsed[mn].ts < SLOTS_PAINT_TTL) slotStore[mn] = parsed[mn];
+        }
+      } catch (e) {}
+    }
+    function saveSlotStore() {
+      try { localStorage.setItem(SLOTS_LS_KEY, JSON.stringify(slotStore)); } catch (e) {}
+    }
+    function getDatesFrom(page) {
+      var today = new Date(); today.setHours(0, 0, 0, 0);
+      var start = new Date(today); start.setDate(start.getDate() + page * 7);
+      var dates = [];
+      var limit = state.bookableUntil || new Date(today.getFullYear(), today.getMonth() + 2, 0);
+      for (var i = 0; i < 14; i++) { var d = new Date(start); d.setDate(start.getDate() + i); if (d > limit) break; dates.push(d); }
+      return dates;
+    }
+    // 指定メニュー・指定週の空き枠を取得して slotStore に格納（同一リクエストの並走はコールバック合流）
+    function fetchSlotsInto(menu, page, onDone) {
+      var dates = getDatesFrom(page);
+      if (!dates.length || !menu) { if (onDone) onDone(); return; }
+      var key = menu + '|' + fmtDate(dates[0]);
+      if (slotsInFlight[key]) { if (onDone) slotsInFlight[key].push(onDone); return; }
+      slotsInFlight[key] = onDone ? [onDone] : [];
+      gasGet({ action: 'getWeekSlots', start_date: fmtDate(dates[0]), days: String(dates.length), menu: menu }, function(err, data) {
+        var cbs = slotsInFlight[key] || [];
+        delete slotsInFlight[key];
+        if (!err && data && data.dates) {
+          var st = slotStore[menu] = slotStore[menu] || { ts: 0, dates: {} };
+          st.ts = Date.now();
+          for (var ds in data.dates) st.dates[ds] = data.dates[ds];
+          saveSlotStore();
+        }
+        cbs.forEach(function(cb) { try { cb(); } catch (e) {} });
+      });
+    }
+    // 全メニュー分を先読み（ページを開いた直後・メニュー選択前に発火）
+    function prefetchAllMenus() {
+      (state.menus || []).slice(0, 6).forEach(function(m) {
+        var st = slotStore[m.name];
+        if (st && Date.now() - st.ts < SLOTS_FRESH_TTL) return; // 十分新しければ何もしない
+        fetchSlotsInto(m.name, 0, function() {
+          // 先読み完了時にちょうどその表を見ていたら最新で描き直す
+          if (state.selectedMenu === m.name && document.getElementById('step2').classList.contains('active')) renderWeekFromStore();
+        });
+      });
+    }
 
     // ===== INIT with localStorage cache =====
     var SETTINGS_TTL = 30 * 60 * 1000; // 設定キャッシュの有効期限: 30分
@@ -702,10 +763,13 @@
         }
       } catch(e) {}
 
+      loadSlotStore(); // 前回訪問時の空き枠キャッシュを復元（3分以内のもののみ）
+
       if (cached && cached.menus.length) {
         // キャッシュがあれば即座に表示してバックグラウンドで更新（ローディング非表示）
         applySettings(cached);
         renderMenus();
+        prefetchAllMenus(); // メニュー選択を待たずに空き枠を先読み開始
         loadSettings(true);
       } else {
         // キャッシュなし・期限切れはローディングを表示して取得
@@ -735,6 +799,7 @@
           localStorage.setItem('trad_settings', JSON.stringify(data));
         } catch(e) {}
         renderMenus();
+        prefetchAllMenus(); // 最新設定でメニューが変わった場合もここで先読みされる（新しければスキップ）
       });
     }
 
@@ -754,15 +819,10 @@
     }
 
     function selectMenu(name) {
-      if (state.selectedMenu !== name) {
-        // メニューが変わった時だけスロットキャッシュをクリア
-        slotCache = {};
-        weekPage = 0;
-        lastSlotCacheMenu = null;
-      }
+      if (state.selectedMenu !== name) weekPage = 0;
       state.selectedMenu = name;
       renderMenus();
-      goToStep(2);
+      goToStep(2); // 空き枠はメニュー別に slotStore へ先読み済みなのでクリア不要
     }
 
     // ===== NAVIGATION =====
@@ -826,15 +886,15 @@
       }
       cart.push({ menu: state.selectedMenu, menuDuration: menuData.duration, date: date, time: time });
       renderCart();
-      // Clear slot cache for this date (mark as taken)
-      delete slotCache[date];
+      // ✓/◯ の表示はカート内容（cartSet）で上書きされるためキャッシュ操作は不要
     }
 
     function removeFromCart(idx) {
-      var removed = cart.splice(idx, 1);
-      if (removed.length) delete slotCache[removed[0].date];
+      cart.splice(idx, 1);
       renderCart();
       if (cart.length === 0) document.getElementById('cartBar').classList.remove('show');
+      // 空き枠テーブルを表示中なら ✓→◯ を反映
+      if (document.getElementById('step2').classList.contains('active')) renderWeekFromStore();
     }
 
     function renderCart() {
@@ -857,13 +917,30 @@
     // ===== 2-WEEK TABLE =====
     function changeWeekPage(d) { weekPage+=d; if(weekPage<0)weekPage=0; loadWeekTable(); }
 
-    function getWeekDates() {
-      var today=new Date(); today.setHours(0,0,0,0);
-      var start=new Date(today); start.setDate(start.getDate()+weekPage*7);
-      var dates=[];
-      var limit=state.bookableUntil||new Date(today.getFullYear(),today.getMonth()+2,0);
-      for(var i=0;i<14;i++){var d=new Date(start);d.setDate(start.getDate()+i);if(d>limit)break;dates.push(d);}
-      return dates;
+    function getWeekDates() { return getDatesFrom(weekPage); }
+
+    // 表示対象の日付列に対して、確定休日＋slotStore から表示用データを組み立てる
+    function buildWeekSlots(dates) {
+      var today=new Date();today.setHours(0,0,0,0);
+      var st=slotStore[state.selectedMenu];
+      var usable=st&&(Date.now()-st.ts<SLOTS_PAINT_TTL);
+      var allSlots={},missing=false;
+      dates.forEach(function(d){
+        var ds=fmtDate(d);
+        if(d<=today||d.getDay()===state.closedDay){allSlots[ds]={closed:true};}
+        else if(usable&&st.dates[ds]){allSlots[ds]=st.dates[ds];}
+        else{missing=true;}
+      });
+      return {allSlots:allSlots,missing:missing,stale:!st||(Date.now()-st.ts>SLOTS_FRESH_TTL)};
+    }
+
+    // slotStore の現状だけで描画（取得しない）。欠けている日は空欄扱い
+    function renderWeekFromStore() {
+      var dates=getWeekDates();
+      if(!dates.length)return;
+      var built=buildWeekSlots(dates);
+      dates.forEach(function(d){var ds=fmtDate(d);if(!built.allSlots[ds])built.allSlots[ds]={closed:true};});
+      renderSlotTable(dates,built.allSlots);
     }
 
     function loadWeekTable() {
@@ -871,34 +948,36 @@
       if(!dates.length){document.getElementById('slotTableArea').innerHTML='<div style="text-align:center;padding:40px;color:var(--gray-500);">予約可能な日がありません</div>';return;}
       document.getElementById('weekLabel').textContent=(dates[0].getMonth()+1)+'月';
       document.getElementById('weekPrev').disabled=(weekPage===0);
+
+      var built=buildWeekSlots(dates);
+      if(!built.missing){
+        // 先読み済み → 待ちゼロで即表示。データが古ければ裏で最新化して差し替え（SWR）
+        renderSlotTable(dates,built.allSlots);
+        if(built.stale)fetchSlotsInto(state.selectedMenu,weekPage,renderWeekFromStore);
+        prefetchNextWeek();
+        return;
+      }
+
+      // 未取得 → 従来どおりスピナーを出して取得
       document.getElementById('slotTableArea').innerHTML='<div style="text-align:center;padding:40px;color:var(--gray-500);"><div class="spinner" style="margin:0 auto;"></div><div style="margin-top:12px;">空き状況を確認中...</div></div>';
+      fetchSlotsInto(state.selectedMenu,weekPage,function(){
+        renderWeekFromStore();
+        prefetchNextWeek();
+      });
+    }
 
+    // 次の2週間分を裏で先読み → 「次の2週間 →」が即表示になる
+    function prefetchNextWeek() {
+      var dates=getDatesFrom(weekPage+1);
+      if(!dates.length)return;
+      var st=slotStore[state.selectedMenu];
       var today=new Date();today.setHours(0,0,0,0);
-      var allSlots={};
-      var needFetch=false;
-
-      // キャッシュ済み・確定休日はAPIコール不要
-      dates.forEach(function(d){
+      var need=dates.some(function(d){
         var ds=fmtDate(d);
-        if(d<=today||d.getDay()===state.closedDay){allSlots[ds]={closed:true};}
-        else if(slotCache[ds]){allSlots[ds]=slotCache[ds];}
-        else{needFetch=true;}
+        if(d<=today||d.getDay()===state.closedDay)return false;
+        return !(st&&Date.now()-st.ts<SLOTS_PAINT_TTL&&st.dates[ds]);
       });
-
-      if(!needFetch){renderSlotTable(dates,allSlots);return;}
-
-      // バッチAPI: 1回のリクエストで全日分を取得
-      gasGet({action:'getWeekSlots',start_date:fmtDate(dates[0]),days:String(dates.length),menu:state.selectedMenu},function(err,data){
-        var dateData=(!err&&data&&data.dates)?data.dates:{};
-        dates.forEach(function(d){
-          var ds=fmtDate(d);
-          if(allSlots[ds])return;
-          var info=dateData[ds];
-          if(info&&!info.closed){allSlots[ds]={slots:info.slots||[]};slotCache[ds]=allSlots[ds];}
-          else{allSlots[ds]={closed:true};}
-        });
-        renderSlotTable(dates,allSlots);
-      });
+      if(need)fetchSlotsInto(state.selectedMenu,weekPage+1);
     }
 
     function renderSlotTable(dates, allSlots) {
@@ -947,15 +1026,7 @@
 
     function selectSlotCell(date, time) {
       addToCart(date, time);
-      // Re-render table to show checkmark
-      var dates=getWeekDates();
-      var allSlots={};
-      dates.forEach(function(d){
-        var ds=fmtDate(d);
-        if(slotCache[ds])allSlots[ds]=slotCache[ds];
-        else allSlots[ds]={closed:true};
-      });
-      renderSlotTable(dates, allSlots);
+      renderWeekFromStore(); // ✓表示を反映して描き直し
     }
 
     // ===== SUBMIT =====
@@ -992,6 +1063,11 @@
               (d.getMonth()+1)+'/'+d.getDate()+'('+dayNames[d.getDay()]+') '+item.time+'〜'+minToTime(endMin)+'</div></div></div>';
           });
           document.getElementById('completeList').innerHTML = html;
+          // 予約が入った日付の先読みデータは古くなったため破棄（次回表示時に再取得される）
+          try {
+            cart.forEach(function(it) { for (var mn in slotStore) { if (slotStore[mn].dates) delete slotStore[mn].dates[it.date]; } });
+            saveSlotStore();
+          } catch (e) {}
           cart = [];
           goToStep(5);
           return;
