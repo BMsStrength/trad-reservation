@@ -780,7 +780,20 @@
     }
 
     // ===== INIT with localStorage cache =====
-    var SETTINGS_TTL = 30 * 60 * 1000; // 設定キャッシュの有効期限: 30分
+    var SETTINGS_TTL = 24 * 60 * 60 * 1000; // 設定キャッシュの有効期限: 24時間（毎回裏で最新化されるので長めでOK）
+
+    // 初回訪問でもメニュー画面を待ちゼロで表示するための初期値（2026-07-22 速度改善・第3弾）。
+    // ⚠ メニュー構成を変えるときは GAS 01_Config.gs の MENUS とここを両方更新すること。
+    // 万一ズレても、起動直後の getBootstrap 到着時に正しいメニュー一覧へ自動で描き直される。
+    var FALLBACK_SETTINGS = {
+      menus: [
+        { name: 'パーソナルトレーニング', duration: 60 },
+        { name: 'ペアトレーニング', duration: 60 },
+        { name: 'メンテナンス', duration: 30 },
+        { name: '無料体験', duration: 90 }
+      ],
+      closed_day: 2, buffer_min: 10, daily_max_reservations: 10, bookable_until: null
+    };
 
     // ?nocache=1 付きで開くと保存済みキャッシュを全消去して完全な初回状態で起動する（動作確認用）
     try {
@@ -805,15 +818,12 @@
 
       loadSlotStore(); // 前回訪問時の空き枠キャッシュを復元（3分以内のもののみ）
 
-      if (cached && cached.menus.length) {
-        // 設定キャッシュがあればメニューを即表示 → 裏でブートストラップ（設定＋全空き枠）を更新
-        applySettings(cached);
-        renderMenus();
-        loadBootstrap(true);
-      } else {
-        // キャッシュなし・期限切れはローディングを表示して1回で全取得
-        loadBootstrap(false);
-      }
+      // メニュー画面は常に待ちゼロで表示する:
+      // 保存済み設定があればそれ、なければHTML埋め込みの初期値で即描画し、
+      // 裏でブートストラップ（最新の設定＋全メニュー×全期間の空き枠）を取得して差し替える
+      applySettings(cached && cached.menus.length ? cached : FALLBACK_SETTINGS);
+      renderMenus();
+      loadBootstrap(true);
     });
 
     function applySettings(data) {
