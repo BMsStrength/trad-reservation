@@ -735,15 +735,47 @@
         cbs.forEach(function(cb) { try { cb(); } catch (e) {} });
       });
     }
-    // 全メニュー分を先読み（ページを開いた直後・メニュー選択前に発火）
-    function prefetchAllMenus() {
-      (state.menus || []).slice(0, 6).forEach(function(m) {
-        var st = slotStore[m.name];
-        if (st && Date.now() - st.ts < SLOTS_FRESH_TTL) return; // 十分新しければ何もしない
-        fetchSlotsInto(m.name, 0, function() {
-          // 先読み完了時にちょうどその表を見ていたら最新で描き直す
-          if (state.selectedMenu === m.name && document.getElementById('step2').classList.contains('active')) renderWeekFromStore();
-        });
+    // getBootstrap の圧縮形式（{c:1}=休業 / {o:[空き時刻], x:[埋まり時刻]}）を
+    // slotStore の標準形式（{closed:true} / {slots:[{time,available}]}）に展開して格納
+    function applyBootstrapWeeks(weeks) {
+      var now = Date.now();
+      for (var mn in weeks) {
+        var src = weeks[mn], dates = {};
+        for (var ds in src) {
+          var v = src[ds] || {};
+          if (v.c) { dates[ds] = { closed: true }; }
+          else {
+            var slots = [];
+            (v.o || []).forEach(function(t) { slots.push({ time: t, available: true }); });
+            (v.x || []).forEach(function(t) { slots.push({ time: t, available: false }); });
+            dates[ds] = { slots: slots };
+          }
+        }
+        slotStore[mn] = { ts: now, dates: dates };
+      }
+      saveSlotStore();
+    }
+
+    // 起動用ブートストラップ: 設定＋全メニュー×予約可能な全期間の空き枠をGAS1往復で取得。
+    // 以後のメニュー切替・週送りはすべて slotStore から即表示になる
+    function loadBootstrap(silent) {
+      if (!silent) showLoading('空き状況を読み込み中...');
+      gasGet({ action: 'getBootstrap' }, function(err, data) {
+        if (!silent) hideLoading();
+        if (err || !data || data.error || !data.settings) {
+          // 失敗時は従来の設定APIにフォールバック（空き枠は表示時に個別取得される）
+          if (!state.menus.length) loadSettings(silent);
+          return;
+        }
+        applySettings(data.settings);
+        try {
+          data.settings._ts = Date.now();
+          localStorage.setItem('trad_settings', JSON.stringify(data.settings));
+        } catch (e) {}
+        renderMenus();
+        if (data.weeks) applyBootstrapWeeks(data.weeks);
+        // ちょうど空き枠テーブルを見ていたら最新データで描き直す
+        if (state.selectedMenu && document.getElementById('step2').classList.contains('active')) renderWeekFromStore();
       });
     }
 
@@ -774,14 +806,13 @@
       loadSlotStore(); // 前回訪問時の空き枠キャッシュを復元（3分以内のもののみ）
 
       if (cached && cached.menus.length) {
-        // キャッシュがあれば即座に表示してバックグラウンドで更新（ローディング非表示）
+        // 設定キャッシュがあればメニューを即表示 → 裏でブートストラップ（設定＋全空き枠）を更新
         applySettings(cached);
         renderMenus();
-        prefetchAllMenus(); // メニュー選択を待たずに空き枠を先読み開始
-        loadSettings(true);
+        loadBootstrap(true);
       } else {
-        // キャッシュなし・期限切れはローディングを表示して取得
-        loadSettings(false);
+        // キャッシュなし・期限切れはローディングを表示して1回で全取得
+        loadBootstrap(false);
       }
     });
 
@@ -807,7 +838,6 @@
           localStorage.setItem('trad_settings', JSON.stringify(data));
         } catch(e) {}
         renderMenus();
-        prefetchAllMenus(); // 最新設定でメニューが変わった場合もここで先読みされる（新しければスキップ）
       });
     }
 
