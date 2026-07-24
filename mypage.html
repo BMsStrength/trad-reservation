@@ -395,14 +395,14 @@
             '<div class="resv-menu">' + esc(r.menu) + '（' + esc(r.duration_min) + '分）</div>';
           if (r.is_calendar) {
             html += '<div class="resv-note">この予約の変更・キャンセルはジムに直接ご連絡ください。</div>';
-          } else if (r.is_recurring) {
-            html += '<div class="resv-note">繰り返し予約の変更・キャンセルはジムに直接ご連絡ください。</div>';
           } else if (r.can_modify && r.cancel_token) {
             html += '<div class="resv-actions">' +
               '<button class="btn btn-outline" onclick="goChange(' + idx + ')">日時を変更</button>' +
               '<button class="btn btn-outline-danger" onclick="doCancel(' + idx + ')">キャンセル</button>' +
             '</div>' +
-            '<div class="resv-note">前日23:59まで変更・キャンセルできます。</div>';
+            (r.is_recurring
+              ? '<div class="resv-note">変更・キャンセルはこの回のみに適用されます（以降の繰り返しのご予約はそのままです）。前日23:59まで操作できます。</div>'
+              : '<div class="resv-note">前日23:59まで変更・キャンセルできます。</div>');
           } else {
             html += '<div class="resv-note">変更・キャンセル期限（前日23:59）を過ぎています。ご都合が悪い場合は直接ご連絡ください。</div>';
           }
@@ -474,7 +474,9 @@
     function doCancel(idx) {
       var r = currentData.upcoming[idx];
       if (!r || !r.cancel_token) return;
-      if (!confirm(fmtDateJa(r.date) + ' ' + r.start_time + ' の予約をキャンセルしますか？')) return;
+      var cancelMsg = fmtDateJa(r.date) + ' ' + r.start_time + ' の予約をキャンセルしますか？';
+      if (r.is_recurring) cancelMsg += '\n（この回のみのキャンセルです。以降の繰り返しのご予約はそのまま残ります）';
+      if (!confirm(cancelMsg)) return;
 
       showLoading('キャンセルしています...');
       gasPost({ action: 'cancelReservation', token: r.cancel_token }, function(err, data, timedOut) {

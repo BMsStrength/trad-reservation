@@ -189,9 +189,10 @@
         '<div class="info-row"><div class="info-label">日時</div><div class="info-value">' + dateStr + ' ' + r.start_time + '〜' + r.end_time + '</div></div>' +
         '</div>';
 
-      if (r.is_recurring) {
-        html += '<div class="recurring-note">この予約は繰り返し予約です。変更・キャンセルはジムに直接ご連絡ください。</div>';
-      } else if (r.can_modify && r.status === 'confirmed') {
+      if (r.can_modify && r.status === 'confirmed') {
+        if (r.is_recurring) {
+          html += '<div class="recurring-note">この予約は繰り返し予約です。ここでの変更・キャンセルは<strong>この回のみ</strong>に適用され、以降の繰り返しのご予約はそのまま残ります。</div>';
+        }
         // 変更フォーム
         html += '<div class="card" style="margin-top:16px;">' +
           '<div class="card-title">予約を変更する</div>' +
@@ -248,7 +249,9 @@
       var newDate = document.getElementById('changeDateInput').value;
       var newTime = document.getElementById('changeTimeSelect').value;
       if (!newDate || !newTime) { alert('日付と時間を選択してください。'); return; }
-      if (!confirm('予約を変更しますか？')) return;
+      var chgMsg = '予約を変更しますか？';
+      if (currentResv.is_recurring) chgMsg += '\n（この回のみの変更です。以降の繰り返しのご予約はそのまま残ります）';
+      if (!confirm(chgMsg)) return;
 
       var btn = document.querySelector('button[onclick="submitChange()"]');
       if (btn) { btn.disabled = true; btn.textContent = '変更中...'; }
@@ -265,7 +268,9 @@
     }
 
     function cancelReservation() {
-      if (!confirm('この予約をキャンセルしますか？')) return;
+      var cxlMsg = 'この予約をキャンセルしますか？';
+      if (currentResv && currentResv.is_recurring) cxlMsg += '\n（この回のみのキャンセルです。以降の繰り返しのご予約はそのまま残ります）';
+      if (!confirm(cxlMsg)) return;
 
       var btn = document.querySelector('button[onclick="cancelReservation()"]');
       if (btn) { btn.disabled = true; btn.textContent = 'キャンセル中...'; }
