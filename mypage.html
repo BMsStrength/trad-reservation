@@ -120,6 +120,20 @@
       cursor:pointer; font-family:inherit;
     }
     .toggle-past { background:none; border:none; color:var(--brand-blue); font-size:12px; font-weight:700; cursor:pointer; font-family:inherit; }
+
+    /* 最新に更新 */
+    .sync-bar { display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:14px; }
+    .sync-info { font-size:11px; color:var(--gray-500); line-height:1.4; }
+    .sync-info.ok { color:var(--success); font-weight:700; }
+    .btn-refresh {
+      flex:none; background:var(--white); color:var(--brand-blue);
+      border:1.5px solid var(--brand-blue); border-radius:20px;
+      padding:7px 14px; font-size:12px; font-weight:700; font-family:inherit; cursor:pointer;
+      display:inline-flex; align-items:center; gap:5px; white-space:nowrap;
+    }
+    .btn-refresh:disabled { opacity:0.6; cursor:default; }
+    .btn-refresh .ico { display:inline-block; font-size:14px; line-height:1; }
+    .btn-refresh.loading .ico { animation:spin 0.8s linear infinite; }
   </style>
 </head>
 <body>
@@ -148,16 +162,21 @@
     var SESSION_KEY = 'trad_mypage_session';
     var CACHE_KEY = 'trad_mypage_cache';
 
+    var lastSyncAt = 0; // このデータをサーバーから受け取った時刻（ms）
+
     function readCache() {
       try {
         var raw = localStorage.getItem(CACHE_KEY);
         if (!raw) return null;
         var c = JSON.parse(raw);
-        return (c && c.data && c.data.member) ? c.data : null;
+        if (!(c && c.data && c.data.member)) return null;
+        lastSyncAt = c.t || 0;
+        return c.data;
       } catch (e) { return null; }
     }
     function writeCache(data) {
-      try { localStorage.setItem(CACHE_KEY, JSON.stringify({ t: Date.now(), data: data })); } catch (e) {}
+      lastSyncAt = Date.now();
+      try { localStorage.setItem(CACHE_KEY, JSON.stringify({ t: lastSyncAt, data: data })); } catch (e) {}
     }
     function clearCache() {
       try { localStorage.removeItem(CACHE_KEY); } catch (e) {}
@@ -222,7 +241,8 @@
               currentData = cached;
               renderMyPage(cached, true);
             }
-            loadData(session, !!cached);
+            // 前回の内容を出せた時は、裏側の取得はキャッシュ無視（force）で最新を取る
+            loadData(session, !!cached, !!cached);
           } else {
             doLogin();
           }
@@ -327,11 +347,21 @@
     // ---------- データ取得・表示 ----------
     var currentData = null;
 
-    function loadData(sessionToken, silent) {
+    /**
+     * データ取得
+     * silent: 画面を消さずに裏で取得する（キャッシュ表示中）
+     * force : サーバー側のキャッシュ（回数券台帳5分・カレンダー3分）も無視して取り直す
+     * done  : 完了コールバック（err, refreshed）
+     */
+    function loadData(sessionToken, silent, force, done) {
       if (!silent) showLoading();
-      gasPost({ action: 'mypageGetData', sessionToken: sessionToken }, function(err, data) {
+      var body = { action: 'mypageGetData', sessionToken: sessionToken };
+      if (force) body.force = true;
+      var reqOpts = force ? { timeoutMs: 45000, retryMax: 1 } : {};
+      gasPost(body, function(err, data) {
         if (err || !data) {
-          if (silent) return; // キャッシュ表示中なら静かに諦める（次回また更新）
+          if (done) { done(err || new Error('no data')); return; }
+          if (silent) { resetRefreshBtn('最新の情報を取得できませんでした。'); return; } // キャッシュ表示中なら静かに諦める
           showError('接続エラーが発生しました。', function() { loadData(sessionToken); });
           return;
         }
@@ -342,14 +372,56 @@
           return;
         }
         if (data.error) {
-          if (silent) return;
+          if (done) { done(new Error(data.error)); return; }
+          if (silent) { resetRefreshBtn('最新の情報を取得できませんでした。'); return; }
           showError(data.error, function() { loadData(sessionToken); });
           return;
         }
         currentData = data;
         writeCache(data);
-        renderMyPage(data);
+        renderMyPage(data, false, !!force && !!done);
+        if (done) done(null);
+      }, reqOpts);
+    }
+
+    /** 更新ボタンを押せる状態に戻す（メッセージ任意） */
+    function resetRefreshBtn(msg) {
+      var b = document.getElementById('refreshBtn');
+      var i = document.getElementById('syncInfo');
+      if (b) {
+        b.disabled = false;
+        b.classList.remove('loading');
+        b.innerHTML = '<span class="ico">⟳</span>最新に更新';
+      }
+      if (i) {
+        i.className = 'sync-info';
+        i.textContent = msg || (lastSyncAt ? '最終更新 ' + fmtClock(lastSyncAt) : '');
+      }
+    }
+
+    /** 「最新に更新」ボタン */
+    function doRefresh() {
+      var session = localStorage.getItem(SESSION_KEY);
+      if (!session) { doLogin(); return; }
+      var btn = document.getElementById('refreshBtn');
+      var info = document.getElementById('syncInfo');
+      if (btn) {
+        btn.disabled = true;
+        btn.classList.add('loading');
+        btn.innerHTML = '<span class="ico">⟳</span>更新中...';
+      }
+      if (info) { info.className = 'sync-info'; info.textContent = '最新の情報を取得しています...'; }
+
+      loadData(session, true, true, function(err) {
+        if (!err) return; // 成功時は画面が再描画される
+        resetRefreshBtn('更新できませんでした。通信状況をご確認のうえ、もう一度お試しください。');
       });
+    }
+
+    function fmtClock(ms) {
+      if (!ms) return '';
+      var d = new Date(ms);
+      return ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2);
     }
 
     function fmtDateJa(dateStr) {
@@ -359,13 +431,20 @@
       return (d.getMonth() + 1) + '月' + d.getDate() + '日（' + dayNames[d.getDay()] + '）';
     }
 
-    function renderMyPage(data, isStale) {
+    function renderMyPage(data, isStale, justRefreshed) {
       var html = '';
-      if (isStale) {
-        html += '<div style="text-align:center;font-size:11px;color:var(--gray-500);margin-bottom:10px;">最新の情報を確認しています...</div>';
-      }
       html += '<div class="greeting">' + esc(data.member.display_name) + ' さん' +
         '<small>マイページへようこそ</small></div>';
+
+      // 最終更新の表示＋手動更新ボタン
+      var infoCls = 'sync-info' + (justRefreshed ? ' ok' : '');
+      var infoText = isStale ? '最新の情報を確認しています...'
+        : (justRefreshed ? '最新の情報に更新しました（' + fmtClock(lastSyncAt) + '）'
+          : (lastSyncAt ? '最終更新 ' + fmtClock(lastSyncAt) : ''));
+      html += '<div class="sync-bar">' +
+          '<div class="' + infoCls + '" id="syncInfo">' + esc(infoText) + '</div>' +
+          '<button class="btn-refresh" id="refreshBtn"><span class="ico">⟳</span>最新に更新</button>' +
+        '</div>';
 
       // 回数券（本人分と、ペア共用分は分けて表示）
       if (data.tickets && data.tickets.available) {
@@ -446,6 +525,21 @@
       html += '<div class="footer-link"><button id="logoutBtn">ログアウト</button></div>';
 
       $c.innerHTML = html;
+
+      var refreshBtn = document.getElementById('refreshBtn');
+      if (refreshBtn) {
+        refreshBtn.onclick = doRefresh;
+        if (isStale) { refreshBtn.disabled = true; refreshBtn.classList.add('loading'); }
+      }
+      if (justRefreshed) {
+        setTimeout(function() {
+          var i = document.getElementById('syncInfo');
+          if (i && i.className.indexOf('ok') >= 0) {
+            i.className = 'sync-info';
+            i.textContent = '最終更新 ' + fmtClock(lastSyncAt);
+          }
+        }, 4000);
+      }
 
       var toggleBtn = document.getElementById('togglePastBtn');
       if (toggleBtn) {
