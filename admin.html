@@ -1140,7 +1140,17 @@
     function openDetail(r) {
       currentDetailResv = r;
       var recurBadge = r.series_id ? '<span style="background:#FFF3E0;color:#E65100;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:700;margin-left:6px;">繰り返し</span>' : '';
-      var menuColor = {'パーソナルトレーニング':'#1565C0','ペアトレーニング':'#E65100','メンテナンス':'#2E7D32','無料体験':'#6A1B9A'}[r.menu] || '#1565C0';
+      var menuColor = {'パーソナルトレーニング':'#1565C0','ペアトレーニング':'#E65100','メンテナンス':'#2E7D32','無料体験':'#6A1B9A','体験セッション':'#6A1B9A'}[r.menu] || '#1565C0';
+
+      // 事前決済の状態（決済対象の予約のみ）
+      var payRow = '';
+      var payStatus = String(r.payment_status || '').trim();
+      if (payStatus) {
+        payRow = '<br><b>お支払い:</b> ' + paymentBadge(r);
+        if (payStatus === 'unpaid' && r.payment_link) {
+          payRow += ' <a href="' + escapeHtml(r.payment_link) + '" target="_blank" rel="noopener" style="font-size:12px;">決済ページを開く</a>';
+        }
+      }
 
       var html = '<div style="font-size:14px;line-height:2;">' +
         '<b>お客様:</b> ' + escapeHtml(r.customer_name) + recurBadge + '<br>' +
@@ -1148,7 +1158,7 @@
         '<b>日付:</b> ' + escapeHtml(r.date) + '<br>' +
         '<b>時間:</b> ' + escapeHtml(fmtTimeSafe(r.start_time)) + '〜' + escapeHtml(fmtTimeSafe(r.end_time)) + '<br>' +
         '<b>メール:</b> ' + escapeHtml(r.customer_email || '-') + '<br>' +
-        '<b>電話:</b> ' + escapeHtml(r.customer_phone || '-') + '</div>';
+        '<b>電話:</b> ' + escapeHtml(r.customer_phone || '-') + payRow + '</div>';
       document.getElementById('detailContent').innerHTML = html;
 
       // Populate time selects
@@ -1325,6 +1335,7 @@
       var html = '';
       rows.forEach(function(r) {
         var badge = r.status === 'confirmed' ? '<span class="badge badge-confirmed">確定</span>' : '<span class="badge badge-cancelled">取消</span>';
+        badge += paymentBadge(r);
         var actions = r.status === 'confirmed'
           ? '<button class="btn btn-outline btn-sm" onclick="resendResvRow(\'' + r.id + '\')" title="予約確定メールを再送">メール再送</button> ' +
             '<button class="btn btn-danger btn-sm" onclick="cancelResv(\'' + r.id + '\')">取消</button>'
@@ -1333,6 +1344,19 @@
           '<td>' + escapeHtml(r.customer_name) + '</td><td>' + escapeHtml(r.menu) + '</td><td>' + badge + '</td><td>' + actions + '</td></tr>';
       });
       tbody.innerHTML = html;
+    }
+
+    // 事前決済の状態バッジ（決済対象でない予約では何も出さない）
+    function paymentBadge(r) {
+      var st = String(r.payment_status || '').trim();
+      if (!st) return '';
+      if (st === 'paid') {
+        return ' <span class="badge" style="background:#E8F5E9;color:#2E7D32;">入金済</span>';
+      }
+      if (st === 'refunded') {
+        return ' <span class="badge" style="background:#ECEFF1;color:#546E7A;">返金済</span>';
+      }
+      return ' <span class="badge" style="background:#FFF3E0;color:#E65100;">未入金</span>';
     }
 
     function resendResvRow(id) {

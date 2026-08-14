@@ -842,15 +842,44 @@
     // 初回訪問でもメニュー画面を待ちゼロで表示するための初期値（2026-07-22 速度改善・第3弾）。
     // ⚠ メニュー構成を変えるときは GAS 01_Config.gs の MENUS とここを両方更新すること。
     // 万一ズレても、起動直後の getBootstrap 到着時に正しいメニュー一覧へ自動で描き直される。
+    // ⚠️ メニューを変更したら GAS の 01_Config.gs の MENUS も同じ内容に更新すること（2箇所必須）
+    //    visible_from / visible_until … メニュー一覧に出す期間（今日の日付で判定）
+    //    bookable_from / bookable_until … 選べる予約日の範囲（サーバー側でも同じ判定をしている）
+    //    price … 事前決済の金額。2026-10-01 からの体験有料化はこの定義だけで自動的に切り替わる
     var FALLBACK_SETTINGS = {
       menus: [
         { name: 'パーソナルトレーニング', duration: 60 },
         { name: 'ペアトレーニング', duration: 60 },
         { name: 'メンテナンス', duration: 30 },
-        { name: '無料体験', duration: 90 }
+        { name: '無料体験', duration: 90, trial: true, visible_until: '2026-09-29', bookable_until: '2026-09-30' },
+        { name: '体験セッション', duration: 90, trial: true, price: 2750, visible_from: '2026-09-20', bookable_from: '2026-10-01' }
       ],
       closed_day: 2, buffer_min: 10, daily_max_reservations: 10, bookable_until: null
     };
+
+    // 今日の日付（端末のローカル日付）を YYYY-MM-DD で返す
+    function todayStrLocal() {
+      var d = new Date();
+      var m = ('0' + (d.getMonth() + 1)).slice(-2);
+      var dd = ('0' + d.getDate()).slice(-2);
+      return d.getFullYear() + '-' + m + '-' + dd;
+    }
+
+    // 表示期間内のメニューだけに絞る
+    // （サーバー側でも絞っているが、FALLBACK と 前日までのキャッシュのために画面側でも判定する）
+    function filterVisibleMenus(menus) {
+      var t = todayStrLocal();
+      return (menus || []).filter(function(m) {
+        if (m.visible_from && t < m.visible_from) return false;
+        if (m.visible_until && t > m.visible_until) return false;
+        return true;
+      });
+    }
+
+    // 金額を「2,750」の形にする
+    function formatYen(n) {
+      return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+    }
 
     // ?nocache=1 付きで開くと保存済みキャッシュを全消去して完全な初回状態で起動する（動作確認用）
     try {
@@ -887,7 +916,7 @@
     });
 
     function applySettings(data) {
-      state.menus = data.menus || [];
+      state.menus = filterVisibleMenus(data.menus);
       state.closedDay = data.closed_day;
       state.bufferMin = data.buffer_min;
       state.dailyMax = data.daily_max_reservations;
@@ -919,7 +948,8 @@
         var div = document.createElement('div');
         div.className = 'menu-card' + (state.selectedMenu === m.name ? ' selected' : '');
         div.onclick = function() { selectMenu(m.name); };
-        div.innerHTML = '<div><div class="menu-name">'+m.name+'</div><div class="menu-duration">'+m.duration+'分</div></div>' +
+        var sub = m.duration + '分' + (m.price ? '／' + formatYen(m.price) + '円（税込・事前決済）' : '');
+        div.innerHTML = '<div><div class="menu-name">'+m.name+'</div><div class="menu-duration">'+sub+'</div></div>' +
           '<div class="menu-check"><span style="display:'+(state.selectedMenu===m.name?'inline':'none')+'">✓</span></div>';
         div.dataset.menu = m.name;
         c.appendChild(div);
@@ -934,9 +964,26 @@
     }
 
     // ===== NAVIGATION =====
-    // カートに無料体験が入っているか（目的・年代の追加入力の表示条件）
+    // 体験系メニューかどうか（メニュー定義の trial で判定・名前の変更に追従する）
+    function isTrialMenu(name) {
+      for (var i = 0; i < state.menus.length; i++) {
+        if (state.menus[i].name === name) return !!state.menus[i].trial;
+      }
+      return name === '無料体験' || name === '体験セッション';
+    }
+    // カートに体験が入っているか（目的・年代の追加入力の表示条件）
     function cartHasTaiken() {
-      return cart.some(function(c) { return c.menu === '無料体験'; });
+      return cart.some(function(c) { return isTrialMenu(c.menu); });
+    }
+    // カート内の事前決済の合計金額（0なら決済なし）
+    function cartPrepayTotal() {
+      var total = 0;
+      cart.forEach(function(c) {
+        for (var i = 0; i < state.menus.length; i++) {
+          if (state.menus[i].name === c.menu && state.menus[i].price) total += state.menus[i].price;
+        }
+      });
+      return total;
     }
     // 無料体験の目的・年代を備考文字列の先頭に合成（確認画面表示・送信の両方で使用）
     function buildNotesWithTaiken(notes) {
@@ -975,6 +1022,15 @@
             '<div class="confirm-row"><div class="confirm-label">日時</div><div class="confirm-value">'+
             (d.getMonth()+1)+'/'+d.getDate()+'('+dayNames[d.getDay()]+') '+item.time+'〜'+minToTime(endMin)+'</div></div></div>';
         });
+        // 事前決済のあるメニューが入っていれば、金額と支払い方法を確認画面で先に伝える
+        var prepayTotal = cartPrepayTotal();
+        if (prepayTotal > 0) {
+          html += '<div class="confirm-card" style="margin-bottom:8px;background:#FFF8E1;border:1px solid #FFE082;">' +
+            '<div class="confirm-row"><div class="confirm-label">お支払い</div><div class="confirm-value"><strong>' +
+            formatYen(prepayTotal) + '円（税込）</strong></div></div>' +
+            '<div class="confirm-row"><div class="confirm-label">お支払い方法</div><div class="confirm-value">' +
+            'ご予約後にお送りするメールのリンクからお支払いください。<br>前日までのお支払いが難しい場合は、当日ジムでも承ります。</div></div></div>';
+        }
         document.getElementById('confirmList').innerHTML = html;
         document.getElementById('confirmName').textContent = name;
         document.getElementById('confirmEmail').textContent = email;
