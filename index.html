@@ -148,33 +148,6 @@
       color: var(--gray-900);
     }
 
-    /* ===== 9月キャンペーンのお知らせ =====
-       表示・非表示は updateCampNotice() が「無料体験がメニューに出ているか」で判断する。
-       01_Config.gs の 無料体験.visible_until を過ぎるとメニューから消え、この帯も自動で消える。
-       手で撤去する作業は不要。文言を変えるときは下の #campNotice を直す。 */
-    .camp {
-      background: linear-gradient(135deg, #0B3D91 0%, #062657 100%);
-      color: var(--white);
-      border-radius: var(--radius);
-      padding: 20px 20px 18px;
-      margin: 20px 0 4px;
-      box-shadow: var(--shadow);
-    }
-    .camp[hidden] { display: none; }
-    .camp-term { font-size: 11px; letter-spacing: .12em; color: rgba(255,255,255,.72); margin-bottom: 8px; }
-    .camp-lab { color: #FFD98A; font-weight: 700; margin-right: 10px; }
-    .camp-h { font-size: 19px; font-weight: 700; line-height: 1.4; margin-bottom: 10px; }
-    .camp-h em { font-style: normal; color: #FFD98A; }
-    .camp-p { font-size: 13px; line-height: 1.85; color: rgba(255,255,255,.9); margin-bottom: 14px; }
-    .camp-p strong { color: var(--white); font-weight: 700; }
-    .camp-list { list-style: none; margin: 0 0 10px; padding: 0; border-top: 1px solid rgba(255,255,255,.2); }
-    .camp-list li { display: flex; gap: 10px; align-items: baseline; padding: 9px 0; font-size: 13px; line-height: 1.6; border-bottom: 1px solid rgba(255,255,255,.2); }
-    .camp-list i { font-style: italic; font-weight: 700; color: #FFD98A; font-size: 12px; min-width: 20px; }
-    .camp-list s { color: rgba(255,255,255,.55); }
-    .camp-list b { color: #FFD98A; font-weight: 700; }
-    .camp-note { font-size: 11px; line-height: 1.7; color: rgba(255,255,255,.62); margin-bottom: 12px; }
-    .camp-pick { font-size: 12.5px; font-weight: 700; margin-bottom: 10px; }
-    .camp-more { display: inline-block; font-size: 12.5px; font-weight: 700; color: rgba(255,255,255,.9); text-decoration: underline; text-underline-offset: 3px; }
     /* ===== Menu Cards ===== */
     .menu-card {
       background: var(--white);
@@ -530,20 +503,6 @@
 
     <!-- ===== STEP 1: Menu Selection ===== -->
     <div class="step-section active" id="step1">
-      <!-- 9月キャンペーンのお知らせ（無料体験が選べる期間だけ出る／撤去作業は不要） -->
-      <section class="camp" id="campNotice" hidden aria-label="無料体験ラストキャンペーンのお知らせ">
-        <div class="camp-term"><span class="camp-lab">SEPTEMBER ONLY</span>9月1日 — 9月30日</div>
-        <p class="camp-h">無料体験 <em>ラスト</em>キャンペーン</p>
-        <p class="camp-p">姿勢評価つきの体験（約90分）を無料でお試しいただけるのは、<strong>9月末のご来店まで</strong>です。10月1日以降の体験は¥2,750（税込）になります。</p>
-        <ul class="camp-list">
-          <li><i>01</i><span>姿勢評価つき体験（約90分）<s>¥2,750</s> → <b>無料</b></span></li>
-          <li><i>02</i><span>入会金 <s>¥11,000</s> → <b>0円</b></span></li>
-          <li><i>03</i><span>トレーニングチケット <b>1回分プレゼント</b></span></li>
-        </ul>
-        <p class="camp-note">特典②③は9月中にご入会いただいた方が対象です。</p>
-        <p class="camp-pick">ご予約は下の「無料体験」からお進みください。</p>
-        <a class="camp-more" href="https://trad-conditioning.jp/free-trial-last-month-september/" target="_blank" rel="noopener">変更の内容と、体験90分でわかることを詳しく見る →</a>
-      </section>
       <h2 class="section-title">メニューを選択</h2>
       <div id="menuList"></div>
     </div>
@@ -995,18 +954,6 @@
         div.dataset.menu = m.name;
         c.appendChild(div);
       });
-      updateCampNotice();
-    }
-
-    // 9月キャンペーンの帯は「無料体験がいま選べるか」だけで判断する。
-    // 無料体験は 01_Config.gs の visible_until を過ぎるとメニューから消えるので、
-    // その時点でこの帯も自動で消える（10/1に手で撤去する作業は発生しない）。
-    // 体験セッション（有料）は price を持つので、これだけになったら帯は出ない。
-    function updateCampNotice() {
-      var el = document.getElementById('campNotice');
-      if (!el) return;
-      var hasFreeTrial = (state.menus || []).some(function(m) { return m.trial && !m.price; });
-      el.hidden = !hasFreeTrial;
     }
 
     function selectMenu(name) {
