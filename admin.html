@@ -1110,8 +1110,13 @@
       }
 
       // 裏で最新データを取得
+      // ★2026-08-31 修正: 「次の週」を連続で押すと、先に投げた古い週の応答が後から届き、
+      //   その古い週で画面とラベルを上書きしてしまう（表示が1週前や今週に戻る）。
+      //   応答を受け取った時点の weekOffset が、この呼び出しの週と違っていたら捨てる。
       var retryCount = 0;
+      function isStale() { return (Number(weekOffset) || 0) !== baseOffset; }
       function fetchData() {
+        if (isStale()) return;
         apiGet('adminGetWeekReservations', '&start_date=' + startDate + '&days=7').then(function(data) {
           if (data.error) {
             if (data.code === 401) { doLogout(); return; }
@@ -1120,12 +1125,15 @@
               setTimeout(fetchData, 2000);
               return;
             }
+            if (isStale()) return;
             setWeekLabel(dates, false);
             // 空グリッドは既に出ているので、ここでは何もしない（前回値を保持）
             return;
           }
           var resvs = data.reservations || [];
-          dashCacheSet(startDate, resvs);
+          dashCacheSet(startDate, resvs);   // キャッシュは古い応答でも入れてよい（週ごとに別キー）
+
+          if (isStale()) return;            // 表示中の週が変わっていたら描画しない
 
           weekReservations = mapResvToDates(resvs, dates);
           renderWeekSchedule(dates, todayStr);
