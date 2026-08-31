@@ -1007,6 +1007,52 @@
       });
     }
 
+    // ===== 期間まとめ取り（2026-08-31 速度改善）=====
+    // 週を1つずつ取ると、1回につきGASの往復2〜3秒がまるまる待ち時間になる。
+    // サーバーは1回で最大62日分を返せるので、8週間ぶんをまとめて取り、
+    // 週ごとに切り分けてキャッシュへ入れておく。離れた週へ送っても待たなくなる。
+    var RANGE_WEEKS_BEFORE = 2;   // 表示中の週の2週前から
+    var RANGE_WEEKS = 8;          // 合計8週間ぶん（= 56日。サーバー上限は62日）
+    var rangeFetching = false;
+
+    /** offset を中心に、前後の週をまとめて1回で取得してキャッシュへ入れる */
+    function fetchWeekRangeAround(offset) {
+      if (rangeFetching) return;
+      offset = Number(offset) || 0;
+      var firstOffset = offset - RANGE_WEEKS_BEFORE;
+
+      // 期間の全週が既にキャッシュ済みなら取りに行かない
+      var missing = false;
+      for (var c = 0; c < RANGE_WEEKS; c++) {
+        if (!dashCacheHas(fmtD(getWeekDates(firstOffset + c)[0]))) { missing = true; break; }
+      }
+      if (!missing) return;
+
+      var startDate = fmtD(getWeekDates(firstOffset)[0]);
+      rangeFetching = true;
+      apiGet('adminGetWeekReservations', '&start_date=' + startDate + '&days=' + (RANGE_WEEKS * 7)).then(function(data) {
+        rangeFetching = false;
+        if (!data || data.error) return;
+
+        // 予約が1件も無い週も「取得済み」として空配列を入れる。
+        // そうしないと、その週を開くたびに取りに行ってしまう。
+        var buckets = {};
+        for (var i = 0; i < RANGE_WEEKS; i++) {
+          buckets[fmtD(getWeekDates(firstOffset + i)[0])] = [];
+        }
+        var list = data.reservations || [];
+        for (var j = 0; j < list.length; j++) {
+          var key = weekStartOf(list[j].date);
+          if (!key) continue;
+          if (!buckets[key]) buckets[key] = [];
+          buckets[key].push(list[j]);
+        }
+        for (var k in buckets) {
+          if (buckets.hasOwnProperty(k)) dashCacheSet(k, buckets[k]);
+        }
+      });
+    }
+
     function mapResvToDates(resvs, dates) {
       return resvs.map(function(r) {
         for (var i = 0; i < dates.length; i++) {
@@ -1139,14 +1185,10 @@
           renderWeekSchedule(dates, todayStr);
           setWeekLabel(dates, false);
 
-          // 前後の週を先読みしておく → 次に「前週／翌週」を押すと即表示
-          // 翌週方向に2週、前週方向に1週ぶん先読み（連続して翌週を押しても待たない）
-          // ただし操作直後（skipPrefetch）は渋滞防止のため先読みしない
-          if (!skipPrefetch) {
-            prefetchWeek(baseOffset + 1);
-            prefetchWeek(baseOffset + 2);
-            prefetchWeek(baseOffset - 1);
-          }
+          // 前後8週間ぶんを1回でまとめて取っておく → 離れた週へ送っても即表示
+          // （従来は隣接3週を1週ずつ3回に分けて取っていた）
+          // ただし操作直後（skipPrefetch）は渋滞防止のため取りに行かない
+          if (!skipPrefetch) fetchWeekRangeAround(baseOffset);
         });
       }
       fetchData();
