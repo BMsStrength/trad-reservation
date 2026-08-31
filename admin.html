@@ -926,7 +926,8 @@
     function refreshDashboard() {
       clearDashCache();
       loadDashboard(true);   // 操作直後は先読みを止めて画面更新を優先（渋滞防止）
-      loadTodayBadge();
+      // 今日の件数は週データから数えられるので、取れなかったときだけAPIを叩く
+      if (!updateTodayBadgeFromCache()) loadTodayBadge();
     }
 
     // カレンダー同期を投げっぱなしで実行（応答を待たない）。
@@ -1014,6 +1015,78 @@
         r._dateStr = r.date;
         return r;
       });
+    }
+
+    // ===== 楽観更新（2026-08-31 速度改善）=====
+    // GASの往復は1回あたり2〜3秒かかる。書き込みの応答を待ってから画面を更新すると
+    // 体感で10秒近く待たされるため、先に画面とキャッシュを書き換えてから送信する。
+    // サーバー側は受信した時点で最後まで実行されるので、画面を先に進めても取りこぼさない。
+    // 失敗したときだけキャッシュを捨てて取り直す。
+
+    /** その日付が含まれる週（月曜始まり）の開始日を返す */
+    function weekStartOf(dateStr) {
+      var d = new Date(dateStr + 'T00:00:00');
+      if (isNaN(d.getTime())) return null;
+      d.setDate(d.getDate() - ((d.getDay() + 6) % 7));
+      d.setHours(0, 0, 0, 0);
+      return fmtD(d);
+    }
+
+    /** 指定日付を含む週のキャッシュを書き換える（キャッシュが無ければ何もしない） */
+    function dashCacheMutate(dateStr, mutator) {
+      var key = weekStartOf(dateStr);
+      if (!key) return;
+      var list = dashCacheGet(key);
+      if (!list) return;
+      var next = mutator(list.slice());
+      if (next) dashCacheSet(key, next);
+    }
+
+    /** 表示中の週をキャッシュから描き直す（通信しない） */
+    function rerenderWeekFromCache() {
+      var dates = getWeekDates(Number(weekOffset) || 0);
+      var cached = dashCacheGet(fmtD(dates[0])) || [];
+      weekReservations = mapResvToDates(cached, dates);
+      renderWeekSchedule(dates, fmtD(new Date()));
+      setWeekLabel(dates, false);
+      updateTodayBadgeFromCache();
+    }
+
+    /** 今日の件数はキャッシュから数える（1往復ぶん節約する） */
+    function updateTodayBadgeFromCache() {
+      var todayStr = fmtD(new Date());
+      var list = dashCacheGet(weekStartOf(todayStr));
+      if (!list) return false;
+      var n = 0;
+      for (var i = 0; i < list.length; i++) if (list[i].date === todayStr) n++;
+      var el = document.getElementById('todayBadge');
+      if (el) el.textContent = '今日: ' + n + '件';
+      return true;
+    }
+
+    /** 画面右下に短いメッセージを出す（alertと違い操作を止めない） */
+    function toast(msg, isError) {
+      var el = document.getElementById('tradToast');
+      if (!el) {
+        el = document.createElement('div');
+        el.id = 'tradToast';
+        el.style.cssText = 'position:fixed;right:16px;bottom:16px;z-index:9999;padding:12px 18px;' +
+          'border-radius:8px;color:#fff;font-size:14px;box-shadow:0 4px 16px rgba(0,0,0,.25);' +
+          'max-width:80vw;transition:opacity .2s;';
+        document.body.appendChild(el);
+      }
+      el.style.background = isError ? '#c62828' : '#2e7d32';
+      el.textContent = msg;
+      el.style.opacity = '1';
+      clearTimeout(el._t);
+      el._t = setTimeout(function() { el.style.opacity = '0'; }, isError ? 6000 : 2500);
+    }
+
+    /** 楽観更新が失敗したときに、正しい状態へ戻す */
+    function revertOptimistic(message) {
+      toast(message || '反映できませんでした。最新の状態に戻します。', true);
+      clearDashCache();
+      loadDashboard(true);
     }
 
     function loadDashboard(skipPrefetch) {
@@ -1194,18 +1267,49 @@
       var newDate = document.getElementById('detChangeDate').value;
       var newTime = document.getElementById('detChangeTime').value;
       if (!newDate || !newTime) { alert('日付と時間を選択してください'); return; }
+
+      var r = currentDetailResv;
+      var oldDate = r.date;
+      var dur = Number(r.duration_min) || 60;
+      var newEnd = addMinutesToTime(newTime, dur);
+
+      // 先に画面上で動かす（サーバーの応答は待たない）
+      closeModal('detailModal');
+      dashCacheMutate(oldDate, function(list) {
+        return list.filter(function(x) { return String(x.id) !== String(r.id); });
+      });
+      var moved = {};
+      for (var k in r) { if (r.hasOwnProperty(k)) moved[k] = r[k]; }
+      moved.date = newDate;
+      moved.start_time = newTime;
+      moved.end_time = newEnd;
+      delete moved._dayIdx;
+      moved._dateStr = newDate;
+      dashCacheMutate(newDate, function(list) { list.push(moved); return list; });
+      rerenderWeekFromCache();
+      toast('予約を変更しました');
+
       apiPost({
         action: 'adminChangeReservation',
-        id: currentDetailResv.id,
+        id: r.id,
         new_date: newDate,
         new_start_time: newTime,
         skip_notify: true
       }).then(function(data) {
-        if (data.error) { alert(data.error); return; }
-        alert('予約を変更しました');
-        closeModal('detailModal');
-        refreshDashboard();
+        if (data && data.error) { revertOptimistic('変更できませんでした: ' + data.error); return; }
+        // 繰り返し予約の変更はサーバー側で別IDの単発予約に作り直される。
+        // 画面上のIDが古いままだと次の操作が別の行に当たるので、裏で取り直す。
+        clearDashCache();
+        loadDashboard(true);
       });
+    }
+
+    /** HH:MM に分を足す */
+    function addMinutesToTime(hhmm, minutes) {
+      var parts = String(hhmm).split(':');
+      var total = (Number(parts[0]) || 0) * 60 + (Number(parts[1]) || 0) + (Number(minutes) || 0);
+      var h = Math.floor(total / 60), m = total % 60;
+      return ('0' + h).slice(-2) + ':' + ('0' + m).slice(-2);
     }
 
     function submitNextBooking() {
@@ -1217,6 +1321,24 @@
       var btn = document.querySelector('#detailModal .btn-success');
       if (btn && btn.disabled) return;
       if (btn) { btn.disabled = true; btn.textContent = '作成中…'; }
+
+      // 先に画面へ仮の予約を置く（サーバーの応答は待たない）
+      var tempId = 'pending-' + Date.now();
+      closeModal('detailModal');
+      dashCacheMutate(nextDate, function(list) {
+        list.push({
+          id: tempId, _pending: true,
+          customer_name: r.customer_name, customer_email: r.customer_email || '',
+          customer_phone: r.customer_phone || '', menu: r.menu,
+          duration_min: r.duration_min, date: nextDate,
+          start_time: nextTime, end_time: addMinutesToTime(nextTime, Number(r.duration_min) || 60),
+          status: 'CONFIRMED', _dateStr: nextDate
+        });
+        return list;
+      });
+      rerenderWeekFromCache();
+      toast('次回予約を作成しました');
+
       apiPost({
         action: 'adminCreateReservation',
         customer_name: r.customer_name,
@@ -1228,10 +1350,17 @@
         skip_notify: true
       }).then(function(data) {
         if (btn) { btn.disabled = false; btn.textContent = '次回予約を作成'; }
-        if (data.error) { alert(data.error); return; }
-        closeModal('detailModal');
-        refreshDashboard();
-        alert('次回予約を作成しました');
+        if (data && data.error) { revertOptimistic('次回予約を作成できませんでした: ' + data.error); return; }
+        // 仮の行を、サーバーが採番した正式なIDに置き換える
+        if (data && data.id) {
+          dashCacheMutate(nextDate, function(list) {
+            for (var i = 0; i < list.length; i++) {
+              if (list[i]._pending && list[i].id === tempId) { list[i].id = data.id; delete list[i]._pending; }
+            }
+            return list;
+          });
+          rerenderWeekFromCache();
+        }
       });
     }
 
@@ -1256,19 +1385,22 @@
       if (!currentDetailResv) return;
       if (!confirm(currentDetailResv.customer_name + 'の予約をキャンセルしますか？\n（通知メールは送信されません）')) return;
       var cid = currentDetailResv.id;
-      var btn = document.querySelector('#detailModal .btn-danger');
-      if (btn && btn.disabled) return;
-      if (btn) { btn.disabled = true; btn.textContent = '処理中…'; }
+      var cdate = currentDetailResv.date;
+
+      // 先に画面から消す（サーバーの応答は待たない）
+      closeModal('detailModal');
+      dashCacheMutate(cdate, function(list) {
+        return list.filter(function(x) { return String(x.id) !== String(cid); });
+      });
+      rerenderWeekFromCache();
+      toast('キャンセルしました');
+
       apiPost({
         action: 'adminCancelReservation',
         id: cid,
         skip_notify: true
       }).then(function(data) {
-        if (btn) { btn.disabled = false; btn.textContent = 'キャンセル（通知なし）'; }
-        if (data.error) { alert(data.error); return; }
-        closeModal('detailModal');
-        refreshDashboard();
-        alert('キャンセルしました');
+        if (data && data.error) revertOptimistic('キャンセルできませんでした: ' + data.error);
       });
     }
 
@@ -1835,16 +1967,24 @@
         end_time: document.getElementById('blkEnd').value,
         reason: document.getElementById('blkReason').value
       }).then(function(data) {
-        if (data.error) { alert(data.error); return; }
-        closeModal('blockModal');
-        loadBlocks();
+        if (data && data.error) { toast(data.error, true); }
+        loadBlocks();   // 応答が返ってから一覧を取り直す（画面は既に閉じている）
       });
+      closeModal('blockModal');
+      toast('ブロックを追加しました');
     }
 
     function deleteBlock(id) {
       if (!confirm('このブロックを削除しますか？')) return;
+      // 先に行を消して、応答は待たない
+      var row = document.querySelector('#blockTableBody button[onclick*="' + id + '"]');
+      if (row) {
+        var tr = row.parentNode && row.parentNode.parentNode;
+        if (tr && tr.parentNode) tr.parentNode.removeChild(tr);
+      }
+      toast('ブロックを削除しました');
       apiPost({ action: 'adminDeleteBlock', id: id }).then(function(data) {
-        if (data.error) { alert(data.error); return; }
+        if (data && data.error) { toast(data.error, true); }
         loadBlocks();
       });
     }
