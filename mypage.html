@@ -241,8 +241,10 @@
               currentData = cached;
               renderMyPage(cached, true);
             }
-            // 前回の内容を出せた時は、裏側の取得はキャッシュ無視（force）で最新を取る
-            loadData(session, !!cached, !!cached);
+            // 裏側の取得ではサーバー側のキャッシュ（回数券台帳5分・カレンダー3分）を使う。
+            // 毎回無視していると、台帳への問い合わせだけで9秒以上かかり開くたびに待たされる。
+            // 必ず最新にしたいときは「⟳最新に更新」を押していただく。
+            loadData(session, !!cached);
           } else {
             doLogin();
           }
@@ -261,8 +263,16 @@
         return;
       }
       showLoading('ログインしています...');
-      gasPost({ action: 'mypageLogin', id_token: idToken }, function(err, data) {
-        if (err || !data) { showError('接続エラーが発生しました。', boot); return; }
+      // ログインは「LINEの確認 → 予約・回数券の取得」まで1回で行う一番重い処理。
+      // 25秒で打ち切って自動リトライすると、サーバー側は動き続けたまま
+      // 同じ処理が重なって余計に遅くなるので、待つ時間を延ばしてリトライしない。
+      gasPost({ action: 'mypageLogin', id_token: idToken }, function(err, data, timedOut) {
+        if (err || !data) {
+          showError(timedOut
+            ? '読み込みに時間がかかっています。電波の良い場所で、もう一度お試しください。'
+            : '接続エラーが発生しました。', boot);
+          return;
+        }
         if (data.error) { showError(data.error, boot); return; }
         if (data.need_link) { renderLinkForm(); return; }
         localStorage.setItem(SESSION_KEY, data.sessionToken);
@@ -274,7 +284,7 @@
         } else {
           loadData(data.sessionToken);
         }
-      });
+      }, { timeoutMs: 60000, retryMax: 0 });
     }
 
     // ---------- 初回のメール認証（LINEアカウント紐づけ） ----------
@@ -318,7 +328,7 @@
         if (data.error) { setLinkMsg(data.error, 'msg-error'); return; }
         document.getElementById('codeArea').style.display = 'block';
         setLinkMsg('認証コードをメールに送信しました。届かない場合は迷惑メールフォルダもご確認ください。', 'msg-success');
-      });
+      }, { timeoutMs: 60000, retryMax: 0 });
     }
 
     function verifyCode() {
@@ -341,7 +351,7 @@
         } else {
           loadData(data.sessionToken);
         }
-      });
+      }, { timeoutMs: 60000, retryMax: 0 });
     }
 
     // ---------- データ取得・表示 ----------
@@ -357,7 +367,7 @@
       if (!silent) showLoading();
       var body = { action: 'mypageGetData', sessionToken: sessionToken };
       if (force) body.force = true;
-      var reqOpts = force ? { timeoutMs: 45000, retryMax: 1 } : {};
+      var reqOpts = { timeoutMs: 45000, retryMax: 1 };
       gasPost(body, function(err, data) {
         if (err || !data) {
           if (done) { done(err || new Error('no data')); return; }
