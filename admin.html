@@ -1297,7 +1297,10 @@
       var sel = (typeof target === 'string') ? document.getElementById(target) : target;
       if (!sel) return;
       sel.innerHTML = '';
-      for (var m = 8*60+50; m <= 22*60+30; m += 10) {
+      // 管理画面だけ 8:30 から選べる（2026-09-13）。
+      // お客様側（index.html / mypage.html）は従来どおり 9:00 開始・朝の延長でも 8:50 までで、
+      // 8:30〜8:40 は中森さんが管理画面から入れる例外枠として扱う。
+      for (var m = 8*60+30; m <= 22*60+30; m += 10) {
         var t = ('0'+Math.floor(m/60)).slice(-2) + ':' + ('0'+(m%60)).slice(-2);
         sel.innerHTML += '<option value="' + t + '">' + t + '</option>';
       }
