@@ -797,16 +797,19 @@
         done = true;
         clearTimeout(timer);
         delete window[n]; s.remove();
-        cb({error:'接続エラー'});
+        cb({error:'接続エラー', unconfirmed:true});
       };
       // タイムアウト（既定15秒・カレンダー操作を伴う重い処理は呼び出し側で延長）
+      // ★unconfirmed:true を付けて返す。GASは受信した時点で最後まで実行されるので、
+      //   「応答が来なかった＝処理されなかった」ではない。書き込み系の呼び出し側は
+      //   これを見て「失敗」と断定せず、最新の状態を取り直して確認する。
       var timer = setTimeout(function() {
         if (done) return;
         done = true;
         delete window[n];
         var el = document.getElementById(n);
         if (el) el.remove();
-        cb({error:'タイムアウト: サーバーの応答が遅いです。再度お試しください。'});
+        cb({error:'タイムアウト: サーバーの応答が遅いです。再度お試しください。', unconfirmed:true});
       }, timeoutMs || 15000);
       document.body.appendChild(s);
     }
@@ -905,9 +908,13 @@
     }
     // 予約の一括生成・削除＋カレンダー予定の作成・削除を伴うアクションは数十秒かかるため延長
     var HEAVY_ACTIONS = { adminUpdateRecurring: 1, adminCreateRecurring: 1, adminStopRecurring: 1, adminBulkCancelRecurring: 1, adminBulkCreate: 1, adminUpdateCustomer: 1 };
+    // 1件だけの操作でも、Googleカレンダーの予定作成・削除を伴うものは
+    // GASの起動 + カレンダーAPI + 顧客登録 + メール送信で15秒を超えることがある。
+    // 15秒で切ると「カレンダーには予定ができているのに、画面は失敗扱い」になるため延長する。
+    var CALENDAR_ACTIONS = { adminCreateReservation: 1, adminCancelReservation: 1, adminChangeReservation: 1, adminSyncCalendar: 1 };
     function apiPost(body) {
       body.adminToken = adminToken;
-      var timeoutMs = HEAVY_ACTIONS[body.action] ? 180000 : 15000;
+      var timeoutMs = HEAVY_ACTIONS[body.action] ? 180000 : (CALENDAR_ACTIONS[body.action] ? 90000 : 15000);
       var payload = encodeURIComponent(JSON.stringify(body));
       return { then: function(handler) {
         _jsonp(API_BASE + '?payload=' + payload, function(data) { handler(data); }, timeoutMs);
@@ -1403,6 +1410,11 @@
         skip_notify: true
       }).then(function(data) {
         if (btn) { btn.disabled = false; btn.textContent = '次回予約を作成'; }
+        if (data && data.unconfirmed) {
+          // 応答を受け取れなかっただけの状態。作成済みのことが多いので失敗と断定しない。
+          revertOptimistic('サーバーの応答を確認できませんでした。最新の状態を取り直します（予約は作成済みの場合があります）。');
+          return;
+        }
         if (data && data.error) { revertOptimistic('次回予約を作成できませんでした: ' + data.error); return; }
         // 仮の行を、サーバーが採番した正式なIDに置き換える
         if (data && data.id) {
@@ -1453,6 +1465,10 @@
         id: cid,
         skip_notify: true
       }).then(function(data) {
+        if (data && data.unconfirmed) {
+          revertOptimistic('サーバーの応答を確認できませんでした。最新の状態を取り直します（キャンセル済みの場合があります）。');
+          return;
+        }
         if (data && data.error) revertOptimistic('キャンセルできませんでした: ' + data.error);
       });
     }
@@ -1556,6 +1572,12 @@
     function cancelResv(id) {
       if (!confirm('この予約をキャンセルしますか？')) return;
       apiPost({action:'adminCancelReservation', id:id, skip_notify:true}).then(function(data){
+        // 応答が来なかった＝「処理されなかった」とは限らない。取り直して実際の状態を見せる。
+        if (data && data.unconfirmed) {
+          toast('サーバーの応答を確認できませんでした。最新の状態を取り直します。', true);
+          clearDashCache(); refreshDashboard(); loadReservations();
+          return;
+        }
         if(data.error) { alert(data.error); return; }
         refreshDashboard(); loadReservations();
       });
@@ -1568,25 +1590,80 @@
     function openClosureModal(){document.getElementById('closureModal').classList.add('show');}
     function closeModal(id){document.getElementById(id).classList.remove('show');}
 
+    /** メニュー選択肢のラベル「パーソナルトレーニング（60分）」から所要時間を読む */
+    function menuDurationFromSelect(selectEl) {
+      if (!selectEl) return 60;
+      var opt = selectEl.options[selectEl.selectedIndex];
+      var m = opt ? /(\d+)\s*分/.exec(opt.textContent || '') : null;
+      return m ? Number(m[1]) : 60;
+    }
+
     function submitCreate() {
       var btn = document.querySelector('#createModal .btn-primary');
       if (btn && btn.disabled) return;
-      if (btn) { btn.disabled = true; btn.textContent = '作成中…'; }
+
+      var menuSel = document.getElementById('mMenu');
       var body = {
         action:'adminCreateReservation',
-        customer_name: document.getElementById('mName').value,
-        customer_email: document.getElementById('mEmail').value,
-        customer_phone: document.getElementById('mPhone').value,
-        menu: document.getElementById('mMenu').value,
+        customer_name: document.getElementById('mName').value.trim(),
+        customer_email: document.getElementById('mEmail').value.trim(),
+        customer_phone: document.getElementById('mPhone').value.trim(),
+        menu: menuSel.value,
         date: document.getElementById('mDate').value,
         start_time: document.getElementById('mTime').value,
         skip_notify: document.getElementById('mSkipNotify').checked
       };
+      if (!body.customer_name || !body.date || !body.start_time) {
+        alert('氏名・日付・開始時刻を入力してください。');
+        return;
+      }
+      if (btn) { btn.disabled = true; btn.textContent = '作成中…'; }
+
+      // 先に画面へ仮の予約を置く（サーバーの応答は待たない）。
+      // カレンダー作成を含むと応答まで20秒前後かかることがあり、待たせると
+      // 二重に押されて予約が2件できる事故になるため。
+      var tempId = 'pending-' + Date.now();
+      var dur = menuDurationFromSelect(menuSel);
+      closeModal('createModal');
+      dashCacheMutate(body.date, function(list) {
+        list.push({
+          id: tempId, _pending: true,
+          customer_name: body.customer_name, customer_email: body.customer_email,
+          customer_phone: body.customer_phone, menu: body.menu,
+          duration_min: dur, date: body.date,
+          start_time: body.start_time, end_time: addMinutesToTime(body.start_time, dur),
+          status: 'CONFIRMED', _dateStr: body.date
+        });
+        return list;
+      });
+      rerenderWeekFromCache();
+      toast('予約を作成しました');
+
       apiPost(body).then(function(data){
         if (btn) { btn.disabled = false; btn.textContent = '予約を作成'; }
-        if(data.error){alert(data.error);return;}
-        closeModal('createModal');
-        refreshDashboard(); loadReservations();
+        if (data && data.unconfirmed) {
+          // 応答を受け取れなかっただけの状態。サーバー側では作成済みのことが多いので、
+          // 「失敗」と言って消さず、最新の状態を取り直して実際にどうなったかを見せる。
+          revertOptimistic('サーバーの応答を確認できませんでした。最新の状態を取り直します（予約は作成済みの場合があります）。');
+          setTimeout(loadReservations, 1500);
+          return;
+        }
+        if (data && data.error) {
+          revertOptimistic('予約を作成できませんでした。');
+          alert('予約を作成できませんでした: ' + data.error);
+          return;
+        }
+        // 仮の行を、サーバーが採番した正式なIDに置き換える
+        if (data && data.id) {
+          dashCacheMutate(body.date, function(list) {
+            for (var i = 0; i < list.length; i++) {
+              if (list[i]._pending && list[i].id === tempId) { list[i].id = data.id; delete list[i]._pending; }
+            }
+            return list;
+          });
+          rerenderWeekFromCache();
+        }
+        loadReservations();
       });
     }
 
