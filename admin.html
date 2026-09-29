@@ -814,6 +814,25 @@
       document.body.appendChild(s);
     }
 
+    // 応答そのものが返ってこなかったとき（タイムアウト／404などの接続エラー）だけ、
+    // 自動で1回やり直す。2026-09-29 に実測したところ、このGASのURLは
+    // 通常1.1〜2.6秒で返るのに、数回に1回 10〜46秒かかるか、Googleドライブの
+    // 「ページが見つかりません」（HTTP 404）が返る。処理の重さとは無関係の
+    // Google側の一時的な不調なので、同じURLをもう一度叩けばほぼ通る。
+    // ★書き込み（apiPost）には使わない。二重登録になる（README 追加㉖）。
+    //   使ってよいのは「何度やっても結果が変わらない呼び出し」＝読み取りとログインだけ。
+    function _jsonpRetry(url, cb, timeoutMs, retries) {
+      var left = (retries == null) ? 1 : retries;
+      function attempt() {
+        _jsonp(url, function(data) {
+          // unconfirmed = サーバーの返事を受け取れなかった印（_jsonp が付ける）
+          if (data && data.unconfirmed && left > 0) { left--; attempt(); return; }
+          cb(data);
+        }, timeoutMs);
+      }
+      attempt();
+    }
+
     function doLogin() {
       var pw = document.getElementById('loginPassword').value;
       if (!pw) return;
@@ -823,18 +842,26 @@
       document.getElementById('loginError').style.display = 'none';
 
       var payload = encodeURIComponent(JSON.stringify({action:'adminLogin', password:pw}));
-      _jsonp(API_BASE + '?payload=' + payload, function(data) {
+      // ログインの処理そのものは軽い（パスワード照合とトークン発行だけ）が、
+      // Google側の応答が実測で最大46秒かかることがある。15秒で切ると
+      // 「たまにサーバータイムアウトでログインできない」状態になるため60秒にし、
+      // 返事が届かなかったときだけ自動で1回やり直す。
+      // ⚠️ やり直すのは「返事が届かなかったとき」だけ。パスワードが違うという返事が
+      //    来たときはやり直さない（失敗回数が二重に数えられ、5回で15分ロックされる）。
+      _jsonpRetry(API_BASE + '?payload=' + payload, function(data) {
         btn.textContent = 'ログイン';
         btn.disabled = false;
         if (data.error) {
-          document.getElementById('loginError').textContent = data.error;
+          document.getElementById('loginError').textContent = data.unconfirmed
+            ? 'サーバーに接続できませんでした。Google側の一時的な不調の可能性があります。少し待ってから、もう一度お試しください。'
+            : data.error;
           document.getElementById('loginError').style.display = 'block';
           return;
         }
         adminToken = data.adminToken;
         localStorage.setItem('trad_admin_token', adminToken);
         showAdmin();
-      });
+      }, 60000, 1);
     }
 
     function doLogout() {
@@ -899,10 +926,13 @@
       if (tab==='settings') loadSettings();
     }
 
+    // 読み取り（GET）は何度呼んでも結果が変わらないので、返事が届かなかったときは
+    // 自動で1回やり直す。ログイン直後のダッシュボード表示が同じ理由で失敗して
+    // 「ログインできない」ように見えるのを防ぐ。待ち時間は1回30秒。
     function apiGet(action, extra) {
       var url = API_BASE + '?action=' + action + '&adminToken=' + adminToken + (extra||'');
       return { then: function(handler) {
-        _jsonp(url, function(data) { handler(data); });
+        _jsonpRetry(url, function(data) { handler(data); }, 30000, 1);
         return { catch: function(){} };
       }};
     }
