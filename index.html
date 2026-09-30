@@ -550,7 +550,7 @@
         <input class="form-input" type="tel" id="inputPhone" placeholder="例：090-1234-5678" autocomplete="tel">
       </div>
 
-      <!-- 無料体験がカートにある時だけ表示（goToStep(3)で切替） -->
+      <!-- 体験トレーニングがカートにある時だけ表示（goToStep(3)で切替） -->
       <div id="taikenExtra" style="display:none;">
         <div class="form-group">
           <label class="form-label">トレーニングの目的<span class="required">必須</span></label>
@@ -851,8 +851,7 @@
         { name: 'パーソナルトレーニング', duration: 60 },
         { name: 'ペアトレーニング', duration: 60 },
         { name: 'メンテナンス', duration: 30 },
-        { name: '無料体験', duration: 90, trial: true, visible_until: '2026-09-29', bookable_until: '2026-09-30' },
-        { name: '体験セッション', duration: 90, trial: true, price: 2750, visible_from: '2026-09-20', bookable_from: '2026-10-01' }
+        { name: '体験トレーニング', duration: 90, trial: true, price: 2750 }
       ],
       closed_day: 2, buffer_min: 10, daily_max_reservations: 10, bookable_until: null
     };
@@ -969,7 +968,7 @@
       for (var i = 0; i < state.menus.length; i++) {
         if (state.menus[i].name === name) return !!state.menus[i].trial;
       }
-      return name === '無料体験' || name === '体験セッション';
+      return name === '体験トレーニング' || name === '無料体験';
     }
     // カートに体験が入っているか（目的・年代の追加入力の表示条件）
     function cartHasTaiken() {
@@ -985,7 +984,7 @@
       });
       return total;
     }
-    // 無料体験の目的・年代を備考文字列の先頭に合成（確認画面表示・送信の両方で使用）
+    // 体験トレーニングの目的・年代を備考文字列の先頭に合成（確認画面表示・送信の両方で使用）
     function buildNotesWithTaiken(notes) {
       if (!cartHasTaiken()) return notes;
       var p = document.getElementById('inputPurpose').value;
@@ -1000,7 +999,7 @@
     function goToStep(step) {
       if (step === 3 && cart.length === 0) { showError('予約をカートに追加してください。'); return; }
       if (step === 3) {
-        // 無料体験がカートにある時だけ目的・年代の入力欄を表示
+        // 体験トレーニングがカートにある時だけ目的・年代の入力欄を表示
         document.getElementById('taikenExtra').style.display = cartHasTaiken() ? '' : 'none';
       }
       if (step === 4) {
