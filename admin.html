@@ -328,6 +328,17 @@
           <button class="btn btn-outline btn-sm" id="detResendBtn" onclick="resendFromDetail()" style="margin-top:6px;">確認メールを再送</button>
           <hr style="margin:16px 0;border:none;border-top:1px solid var(--gray-200);">
 
+          <div class="modal-title" style="font-size:14px;">氏名・連絡先を直す</div>
+          <div style="font-size:12px;color:var(--gray-500);margin:-6px 0 8px;">誤字の修正やひらがな→漢字に。日付・時間は変わらず、お客様にメールも送りません。カレンダーの予定名も直ります。</div>
+          <div class="form-group"><label class="form-label">お名前</label><input class="form-input" type="text" id="detFixName" placeholder="山田花子"></div>
+          <div class="form-row">
+            <div class="form-group"><label class="form-label">メール</label><input class="form-input" type="email" id="detFixEmail" placeholder="（空のままでも可）"></div>
+            <div class="form-group"><label class="form-label">電話</label><input class="form-input" type="tel" id="detFixPhone" placeholder="（空のままでも可）"></div>
+          </div>
+          <button class="btn btn-primary btn-sm" onclick="submitDetailFixContact()" style="margin-bottom:12px;">氏名・連絡先を保存</button>
+
+          <hr style="margin:12px 0;border:none;border-top:1px solid var(--gray-200);">
+
           <div class="modal-title" style="font-size:14px;">予約変更</div>
           <div class="form-row">
             <div class="form-group"><label class="form-label">日付</label><input class="form-input" type="date" id="detChangeDate"></div>
@@ -946,7 +957,7 @@
     // 1件だけの操作でも、Googleカレンダーの予定作成・削除を伴うものは
     // GASの起動 + カレンダーAPI + 顧客登録 + メール送信で15秒を超えることがある。
     // 15秒で切ると「カレンダーには予定ができているのに、画面は失敗扱い」になるため延長する。
-    var CALENDAR_ACTIONS = { adminCreateReservation: 1, adminCancelReservation: 1, adminChangeReservation: 1, adminSyncCalendar: 1 };
+    var CALENDAR_ACTIONS = { adminCreateReservation: 1, adminCancelReservation: 1, adminChangeReservation: 1, adminSyncCalendar: 1, adminUpdateReservationContact: 1 };
     function apiPost(body) {
       body.adminToken = adminToken;
       var timeoutMs = HEAVY_ACTIONS[body.action] ? 180000 : (CALENDAR_ACTIONS[body.action] ? 90000 : 15000);
@@ -1333,6 +1344,11 @@
       document.getElementById('detChangeDate').value = r.date;
       document.getElementById('detChangeTime').value = fmtTimeSafe(r.start_time);
 
+      // 氏名・連絡先の修正欄に現在の値を入れておく
+      document.getElementById('detFixName').value = r.customer_name || '';
+      document.getElementById('detFixEmail').value = r.customer_email || '';
+      document.getElementById('detFixPhone').value = r.customer_phone || '';
+
       document.getElementById('detailModal').classList.add('show');
     }
 
@@ -1397,6 +1413,55 @@
         // 画面上のIDが古いままだと次の操作が別の行に当たるので、裏で取り直す。
         clearDashCache();
         loadDashboard(true);
+      });
+    }
+
+    /**
+     * 氏名・連絡先だけを直す（日付・時間は変えない／お客様にメールは送らない）
+     * 誤字やひらがな入力を直すためのもの。予約を消して作り直す必要をなくす。
+     * カレンダーの予定名とメモもサーバー側で直る。
+     */
+    function submitDetailFixContact() {
+      var r = currentDetailResv;
+      if (!r) { alert('予約を選び直してください'); return; }
+
+      var name = (document.getElementById('detFixName').value || '').trim();
+      var email = (document.getElementById('detFixEmail').value || '').trim();
+      var phone = (document.getElementById('detFixPhone').value || '').trim();
+      if (!name) { alert('お名前を入力してください'); return; }
+      if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { alert('メールアドレスの形式が正しくありません'); return; }
+
+      var sameName = name === String(r.customer_name || '').trim();
+      var sameEmail = email === String(r.customer_email || '').trim();
+      var samePhone = phone === String(r.customer_phone || '').trim();
+      if (sameName && sameEmail && samePhone) { alert('変更がありません'); return; }
+
+      var btn = event && event.target ? event.target : null;
+      if (btn) { btn.disabled = true; btn.textContent = '保存中...'; }
+
+      apiPost({
+        action: 'adminUpdateReservationContact',
+        id: r.id,
+        customer_name: name,
+        customer_email: email,
+        customer_phone: phone
+      }).then(function(data) {
+        if (btn) { btn.disabled = false; btn.textContent = '氏名・連絡先を保存'; }
+        if (data && data.error) { alert('保存できませんでした: ' + data.error); return; }
+        if (data && data.unconfirmed) {
+          // 応答が届かなかっただけで、サーバー側は処理を終えていることがある。
+          // 失敗と決めつけず取り直す（[[write-timeout-not-failure]]）。
+          toast('応答が確認できませんでした。最新の状態を取り直します');
+        } else {
+          toast('氏名・連絡先を直しました');
+          if (data && data.calendar_updated === false) {
+            alert('予約の氏名は直りましたが、カレンダーの予定が見つからなかったため予定名は変わっていません。');
+          }
+        }
+        closeModal('detailModal');
+        clearDashCache();
+        loadDashboard(true);
+        if (typeof loadReservations === 'function' && currentTab === 'reservations') loadReservations();
       });
     }
 
