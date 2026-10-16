@@ -1300,9 +1300,16 @@
         ev.style.height = heightPx + 'px';
         ev.style.background = menuColors[r.menu] || '#1565C0';
 
+        // まだサーバーの返事が来ていない仮の行は、確定した予約と同じ見た目にしない
+        if (r._pending) {
+          ev.style.opacity = '0.55';
+          ev.style.border = '2px dashed #fff';
+        }
+
         var recurIcon = r.series_id ? '🔄 ' : '';
-        ev.innerHTML = '<div class="sched-event-time">' + (recurIcon ? '🔄 ' : '') + st.slice(0,5) + '〜' + et.slice(0,5) + '</div><div class="sched-event-name">' + escapeHtml(r.customer_name) + '</div>';
-        ev.title = r.menu + ' ' + st + '〜' + et;
+        var nameHtml = escapeHtml(r.customer_name) + (r._pending ? '（保存中…）' : '');
+        ev.innerHTML = '<div class="sched-event-time">' + (recurIcon ? '🔄 ' : '') + st.slice(0,5) + '〜' + et.slice(0,5) + '</div><div class="sched-event-name">' + nameHtml + '</div>';
+        ev.title = r._pending ? '保存中です' : (r.menu + ' ' + st + '〜' + et);
         ev.onclick = (function(resv) { return function() { openDetail(resv); }; })(r);
 
         cell0.style.position = 'relative';
@@ -1498,7 +1505,7 @@
         return list;
       });
       rerenderWeekFromCache();
-      toast('次回予約を作成しました');
+      toast('次回予約を作成しています…');   // 成功と言うのは返事が来てから
 
       apiPost({
         action: 'adminCreateReservation',
@@ -1516,7 +1523,10 @@
           revertOptimistic('サーバーの応答を確認できませんでした。最新の状態を取り直します（予約は作成済みの場合があります）。');
           return;
         }
-        if (data && data.error) { revertOptimistic('次回予約を作成できませんでした: ' + data.error); return; }
+        if (data && data.error) {
+          revertOptimistic('次回予約を作成できませんでした（まだ入っていません）: ' + data.error);
+          return;
+        }
         // 仮の行を、サーバーが採番した正式なIDに置き換える
         if (data && data.id) {
           dashCacheMutate(nextDate, function(list) {
@@ -1527,6 +1537,7 @@
           });
           rerenderWeekFromCache();
         }
+        toast('次回予約を作成しました');   // 返事が来てから言う
       });
     }
 
@@ -1738,7 +1749,10 @@
         return list;
       });
       rerenderWeekFromCache();
-      toast('予約を作成しました');
+      // 🚨 ここで「作成しました」と言ってはいけない（2026-10-16）。
+      //    サーバーの返事を待たずに出しているので、失敗したときに
+      //    「作成しましたと出たのに消えた」という見え方になる。
+      toast('予約を作成しています…');
 
       apiPost(body).then(function(data){
         if (btn) { btn.disabled = false; btn.textContent = '予約を作成'; }
@@ -1750,8 +1764,10 @@
           return;
         }
         if (data && data.error) {
-          revertOptimistic('予約を作成できませんでした。');
-          alert('予約を作成できませんでした: ' + data.error);
+          revertOptimistic('予約を作成できませんでした（まだ入っていません）。');
+          alert('予約を作成できませんでした。\n\n' + data.error
+            + '\n\nこの予約はまだ入っていません。もう一度「予約を作成」を押しても、'
+            + '同じ予約が2件になることはありません。');
           return;
         }
         // 仮の行を、サーバーが採番した正式なIDに置き換える
@@ -1764,6 +1780,7 @@
           });
           rerenderWeekFromCache();
         }
+        toast('予約を作成しました');   // ここまで来て初めて、作成できたと言える
         loadReservations();
       });
     }
