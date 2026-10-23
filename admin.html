@@ -339,6 +339,21 @@
 
           <hr style="margin:12px 0;border:none;border-top:1px solid var(--gray-200);">
 
+          <div class="modal-title" style="font-size:14px;">メニューを変える</div>
+          <div style="font-size:12px;color:var(--gray-500);margin:-6px 0 8px;">当日パーソナル→ペアに変わったときなどに。日付・開始時刻は変わらず、お客様にメールも送りません。カレンダーの予定名（回数券の消化先）も直ります。</div>
+          <div class="form-row">
+            <div class="form-group"><label class="form-label">メニュー</label>
+              <select class="form-select" id="detChangeMenu">
+                <option value="パーソナルトレーニング">パーソナルトレーニング（60分）</option>
+                <option value="ペアトレーニング">ペアトレーニング（60分）</option>
+                <option value="メンテナンス">メンテナンス（30分）</option>
+              </select>
+            </div>
+          </div>
+          <button class="btn btn-primary btn-sm" onclick="submitDetailChangeMenu()" style="margin-bottom:12px;">メニューを変更</button>
+
+          <hr style="margin:12px 0;border:none;border-top:1px solid var(--gray-200);">
+
           <div class="modal-title" style="font-size:14px;">予約変更</div>
           <div class="form-row">
             <div class="form-group"><label class="form-label">日付</label><input class="form-input" type="date" id="detChangeDate"></div>
@@ -957,7 +972,7 @@
     // 1件だけの操作でも、Googleカレンダーの予定作成・削除を伴うものは
     // GASの起動 + カレンダーAPI + 顧客登録 + メール送信で15秒を超えることがある。
     // 15秒で切ると「カレンダーには予定ができているのに、画面は失敗扱い」になるため延長する。
-    var CALENDAR_ACTIONS = { adminCreateReservation: 1, adminCancelReservation: 1, adminChangeReservation: 1, adminSyncCalendar: 1, adminUpdateReservationContact: 1 };
+    var CALENDAR_ACTIONS = { adminCreateReservation: 1, adminCancelReservation: 1, adminChangeReservation: 1, adminSyncCalendar: 1, adminUpdateReservationContact: 1, adminChangeReservationMenu: 1 };
     function apiPost(body) {
       body.adminToken = adminToken;
       var timeoutMs = HEAVY_ACTIONS[body.action] ? 180000 : (CALENDAR_ACTIONS[body.action] ? 90000 : 15000);
@@ -1356,6 +1371,9 @@
       document.getElementById('detFixEmail').value = r.customer_email || '';
       document.getElementById('detFixPhone').value = r.customer_phone || '';
 
+      // メニュー変更欄＝今のメニューを選んでおく（体験はサーバー側で断る）
+      document.getElementById('detChangeMenu').value = r.menu || '';
+
       document.getElementById('detailModal').classList.add('show');
     }
 
@@ -1454,7 +1472,7 @@
         customer_phone: phone
       }).then(function(data) {
         if (btn) { btn.disabled = false; btn.textContent = '氏名・連絡先を保存'; }
-        if (data && data.error) { alert('保存できませんでした: ' + data.error); return; }
+        if (data && data.error && !data.unconfirmed) { alert('保存できませんでした: ' + data.error); return; }
         if (data && data.unconfirmed) {
           // 応答が届かなかっただけで、サーバー側は処理を終えていることがある。
           // 失敗と決めつけず取り直す（[[write-timeout-not-failure]]）。
@@ -1468,7 +1486,48 @@
         closeModal('detailModal');
         clearDashCache();
         loadDashboard(true);
-        if (typeof loadReservations === 'function' && currentTab === 'reservations') loadReservations();
+        var resvPanel = document.getElementById('panel-reservations');
+        if (resvPanel && resvPanel.classList.contains('active')) loadReservations();
+      });
+    }
+
+    /**
+     * メニューだけを変える（日付・開始時刻は変えない／お客様にメールは送らない）
+     * 当日パーソナル→ペアに変わったときなど。カレンダーの予定名もサーバー側で直る。
+     * 🚨 返事が来るまで「変更しました」とは言わない（[[optimistic-ui-no-false-success]]）。
+     */
+    function submitDetailChangeMenu() {
+      var r = currentDetailResv;
+      if (!r) { alert('予約を選び直してください'); return; }
+      var newMenu = document.getElementById('detChangeMenu').value;
+      if (!newMenu) { alert('メニューを選んでください'); return; }
+      if (newMenu === r.menu) { alert('メニューが同じです'); return; }
+      if (!confirm(r.customer_name + ' 様\n' + r.date + ' ' + fmtTimeSafe(r.start_time) + '\n「' + r.menu + '」→「' + newMenu + '」に変更します')) return;
+
+      var btn = event && event.target ? event.target : null;
+      if (btn) { btn.disabled = true; btn.textContent = '変更しています…'; }
+
+      apiPost({
+        action: 'adminChangeReservationMenu',
+        id: r.id,
+        new_menu: newMenu
+      }).then(function(data) {
+        if (btn) { btn.disabled = false; btn.textContent = 'メニューを変更'; }
+        if (data && data.error && !data.unconfirmed) { alert('変更できませんでした: ' + data.error); return; }
+        if (data && data.unconfirmed) {
+          // 応答が届かなかっただけで、サーバー側は処理を終えていることがある（[[write-timeout-not-failure]]）
+          toast('応答が確認できませんでした。最新の状態を取り直します');
+        } else {
+          toast('メニューを「' + newMenu + '」に変更しました' + (data && data.calendar_title ? '（予定名: ' + data.calendar_title + '）' : ''));
+          if (data && data.calendar_updated === false) {
+            alert('予約のメニューは変わりましたが、カレンダーの予定を直せませんでした。回数券の消化先が変わっていないので、カレンダーの予定名を手で確認してください。');
+          }
+        }
+        closeModal('detailModal');
+        clearDashCache();
+        loadDashboard(true);
+        var resvPanel = document.getElementById('panel-reservations');
+        if (resvPanel && resvPanel.classList.contains('active')) loadReservations();
       });
     }
 
