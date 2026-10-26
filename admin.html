@@ -381,6 +381,27 @@
         </div>
       </div>
 
+      <!-- キャンセル理由（2026-10-26 追加） -->
+      <div class="modal-overlay" id="cancelModal">
+        <div class="modal">
+          <div class="modal-title">予約をキャンセル</div>
+          <div id="cancelTarget" style="font-size:13px;color:var(--gray-700);margin:-4px 0 12px;"></div>
+          <div class="form-label">キャンセルの理由</div>
+          <div id="cancelReasons" style="display:flex;flex-direction:column;gap:8px;margin:6px 0 10px;font-size:14px;">
+            <label><input type="radio" name="cancelReason" value="advance"> 前日までのご連絡 <span style="color:var(--gray-500);font-size:12px;">（回数券は消化しない）</span></label>
+            <label><input type="radio" name="cancelReason" value="trad"> TRADの都合 <span style="color:var(--gray-500);font-size:12px;">（回数券は消化しない）</span></label>
+            <label><input type="radio" name="cancelReason" value="sameday"> 当日キャンセル（お客様のご都合） <span style="color:#C62828;font-size:12px;font-weight:700;">（回数券を1回消化）</span></label>
+            <label><input type="radio" name="cancelReason" value="child"> 当日キャンセル（お子さまの体調不良） <span style="color:#C62828;font-size:12px;font-weight:700;">（回数券を1回消化）</span></label>
+            <label><input type="radio" name="cancelReason" value="waived"> 当日キャンセル（今回は消化しない） <span style="color:var(--gray-500);font-size:12px;">（回数券は消化しない）</span></label>
+          </div>
+          <div style="font-size:12px;color:var(--gray-500);line-height:1.7;">「回数券を1回消化」を選ぶと、カレンダーの予定は消さずに灰色で残り、回数券が通常どおり1回減ります。カルテにも「当日キャンセル」の記録が自動で入ります。お客様にメールは送りません。</div>
+          <div class="modal-footer">
+            <button class="btn btn-danger" id="cancelSubmitBtn" onclick="submitCancel()">キャンセルする</button>
+            <button class="btn btn-outline" onclick="closeModal('cancelModal')">戻る</button>
+          </div>
+        </div>
+      </div>
+
       <!-- Reservations -->
       <div class="panel" id="panel-reservations">
         <div class="card">
@@ -1617,31 +1638,72 @@
       });
     }
 
-    function cancelFromDetail() {
-      if (!currentDetailResv) return;
-      if (!confirm(currentDetailResv.customer_name + 'の予約をキャンセルしますか？\n（通知メールは送信されません）')) return;
-      var cid = currentDetailResv.id;
-      var cdate = currentDetailResv.date;
+    // ===== キャンセル（理由を選ぶ・2026-10-26） =====
+    // 予約詳細と予約一覧のどちらから開いても、ここで理由を選んでから送る
+    var _cancelCtx = null;   // { r: 予約, from: 'detail' | 'list' }
 
-      // 先に画面から消す（サーバーの応答は待たない）
-      closeModal('detailModal');
-      dashCacheMutate(cdate, function(list) {
-        return list.filter(function(x) { return String(x.id) !== String(cid); });
+    function openCancelModal(r, from) {
+      _cancelCtx = { r: r, from: from };
+      document.getElementById('cancelTarget').textContent =
+        r.customer_name + '　' + r.date + ' ' + fmtTimeSafe(r.start_time) + '〜' + fmtTimeSafe(r.end_time) + '　' + (r.menu || '');
+      var radios = document.querySelectorAll('input[name="cancelReason"]');
+      for (var i = 0; i < radios.length; i++) radios[i].checked = false;
+      document.getElementById('cancelModal').classList.add('show');
+    }
+
+    function selectedCancelReason() {
+      var el = document.querySelector('input[name="cancelReason"]:checked');
+      return el ? el.value : '';
+    }
+
+    var CONSUMING_REASONS = { sameday: 1, child: 1 };
+
+    function submitCancel() {
+      if (!_cancelCtx) return;
+      var reason = selectedCancelReason();
+      if (!reason) { alert('キャンセルの理由を選んでください。'); return; }
+      var r = _cancelCtx.r;
+      var from = _cancelCtx.from;
+      var consume = !!CONSUMING_REASONS[reason];
+      _cancelCtx = null;
+      closeModal('cancelModal');
+      if (from === 'detail') closeModal('detailModal');
+
+      // 先に画面から消す（サーバーの応答は待たない）。成功と言うのは返事が来てから
+      dashCacheMutate(r.date, function(list) {
+        return list.filter(function(x) { return String(x.id) !== String(r.id); });
       });
       rerenderWeekFromCache();
-      toast('キャンセルしました');
+      toast('キャンセルしています…');
 
       apiPost({
         action: 'adminCancelReservation',
-        id: cid,
+        id: r.id,
+        cancel_reason: reason,
         skip_notify: true
       }).then(function(data) {
         if (data && data.unconfirmed) {
           revertOptimistic('サーバーの応答を確認できませんでした。最新の状態を取り直します（キャンセル済みの場合があります）。');
+          if (from === 'list') loadReservations();
           return;
         }
-        if (data && data.error) revertOptimistic('キャンセルできませんでした: ' + data.error);
+        if (data && data.error) {
+          revertOptimistic('キャンセルできませんでした（予約はそのままです）: ' + data.error);
+          if (from === 'list') loadReservations();
+          return;
+        }
+        if (consume && !data.calendar_marked) {
+          alert('キャンセルはできましたが、カレンダーの予定が見つからなかったため回数券が消化されません。\nカレンダーに予定を手で入れるか、台帳で1回分を直してください。');
+        } else {
+          toast(consume ? 'キャンセルしました（回数券を1回消化）' : 'キャンセルしました');
+        }
+        if (from === 'list') { refreshDashboard(); loadReservations(); }
       });
+    }
+
+    function cancelFromDetail() {
+      if (!currentDetailResv) return;
+      openCancelModal(currentDetailResv, 'detail');
     }
 
     // ===== RESERVATIONS =====
@@ -1707,6 +1769,10 @@
       var html = '';
       rows.forEach(function(r) {
         var badge = r.status === 'confirmed' ? '<span class="badge badge-confirmed">確定</span>' : '<span class="badge badge-cancelled">取消</span>';
+        if (r.status !== 'confirmed' && r.cancel_reason) {
+          badge += '<div style="font-size:11px;color:' + (String(r.cancel_consumed) === 'yes' ? '#C62828' : 'var(--gray-500)') + ';margin-top:2px;">' +
+            escapeHtml(r.cancel_reason) + (String(r.cancel_consumed) === 'yes' ? '・消化' : '') + '</div>';
+        }
         badge += paymentBadge(r);
         var actions = r.status === 'confirmed'
           ? '<button class="btn btn-outline btn-sm" onclick="resendResvRow(\'' + r.id + '\')" title="予約確定メールを再送">メール再送</button> ' +
@@ -1741,17 +1807,12 @@
     }
 
     function cancelResv(id) {
-      if (!confirm('この予約をキャンセルしますか？')) return;
-      apiPost({action:'adminCancelReservation', id:id, skip_notify:true}).then(function(data){
-        // 応答が来なかった＝「処理されなかった」とは限らない。取り直して実際の状態を見せる。
-        if (data && data.unconfirmed) {
-          toast('サーバーの応答を確認できませんでした。最新の状態を取り直します。', true);
-          clearDashCache(); refreshDashboard(); loadReservations();
-          return;
-        }
-        if(data.error) { alert(data.error); return; }
-        refreshDashboard(); loadReservations();
-      });
+      var r = null;
+      for (var i = 0; i < _resvData.length; i++) {
+        if (String(_resvData[i].id) === String(id)) { r = _resvData[i]; break; }
+      }
+      if (!r) { alert('予約データを再読み込みしてください。'); return; }
+      openCancelModal(r, 'list');
     }
 
     // ===== MODALS =====
