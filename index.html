@@ -239,6 +239,12 @@
     .slot-table th.tue { color: var(--gray-400); }
     .slot-table th.today-col { background: var(--brand-blue-pale); }
     .slot-table th.closed-col { background: #f0f0f0; color: var(--gray-400); }
+    .slot-table th.ladies-col { background: #FCE4EC; color: #AD1457; }
+    .ladies-note { margin: 10px 0 0; padding: 10px 12px; background: #FCE4EC; border-radius: 8px; font-size: 12px; line-height: 1.7; color: #6D1B3B; }
+    .ladies-confirm { padding: 12px; background: #FCE4EC; border-radius: 8px; }
+    .ladies-confirm label { display: flex; align-items: center; gap: 8px; font-weight: 700; cursor: pointer; }
+    .ladies-confirm input { width: 20px; height: 20px; }
+    .ladies-confirm .ladies-confirm-note { margin-top: 6px; font-size: 12px; line-height: 1.7; color: #6D1B3B; }
     .slot-table th.past-col { background: #f5f5f5; color: var(--gray-400); }
 
     .slot-table td {
@@ -527,6 +533,11 @@
           <div style="margin-top:12px;">空き状況を読み込み中...</div>
         </div>
       </div>
+      <!-- 火曜レディース（女性専用日）の案内。表示中の期間に火曜の営業日があるときだけ出す -->
+      <div id="ladiesNote" class="ladies-note" style="display:none;">
+        火曜日（ピンクの列）は<strong>女性の方専用日</strong>です（担当：新海杏奈トレーナー）。<br>
+        ご予約いただけるのは、ご登録のある女性会員の方と、体験トレーニングをお申し込みの女性の方です。
+      </div>
 
       <div class="btn-group" id="step2Buttons" style="display:none;">
         <button class="btn btn-secondary" onclick="goToStep(1)">メニュー選択に戻る</button>
@@ -578,6 +589,12 @@
             <option>70代以上</option>
           </select>
         </div>
+      </div>
+
+      <!-- 火曜レディースの体験トレーニングがカートにあるときだけ出す（必須） -->
+      <div id="ladiesConfirmBox" class="form-group ladies-confirm" style="display:none;">
+        <label><input type="checkbox" id="inputLadiesConfirm"> 女性の方です<span class="required">必須</span></label>
+        <div class="ladies-confirm-note">火曜日は女性の方専用日です。女性以外の方と分かった場合は、返金のうえご利用をお断りします。</div>
       </div>
 
       <div class="form-group">
@@ -708,7 +725,8 @@
 
     // ===== STATE =====
     var state = {
-      menus: [], selectedMenu: null, closedDay: 2, bufferMin: 10, dailyMax: 10, bookableUntil: null
+      menus: [], selectedMenu: null, closedDay: 2, bufferMin: 10, dailyMax: 10, bookableUntil: null,
+      tuesdayOpenFrom: '' // 火曜レディースを開ける最初の日（GASの tuesday_open_from。'' のあいだは火曜は定休日）
     };
     var cart = []; // [{menu, menuDuration, date, time}]
     var weekPage = 0;
@@ -917,6 +935,7 @@
     function applySettings(data) {
       state.menus = filterVisibleMenus(data.menus);
       state.closedDay = data.closed_day;
+      state.tuesdayOpenFrom = data.tuesday_open_from || '';
       state.bufferMin = data.buffer_min;
       state.dailyMax = data.daily_max_reservations;
       state.bookableUntil = data.bookable_until ? new Date(data.bookable_until + 'T23:59:59') : null;
@@ -962,6 +981,30 @@
       goToStep(2); // 空き枠はメニュー別に slotStore へ先読み済みなのでクリア不要
     }
 
+    // ===== 火曜レディース（女性専用日）=====
+    // d は Date か 'YYYY-MM-DD'
+    function isLadiesDate(d) {
+      if (!state.tuesdayOpenFrom) return false;
+      var dt = (typeof d === 'string') ? new Date(d + 'T00:00:00') : d;
+      return dt.getDay() === 2 && fmtDate(dt) >= state.tuesdayOpenFrom;
+    }
+    // 定休日か（火曜レディースの日は開ける）
+    function isClosedDate(d) {
+      return d.getDay() === state.closedDay && !isLadiesDate(d);
+    }
+    // 火曜レディースの日の体験トレーニングか（「女性の方です」の確認が要る）
+    function needsLadiesConfirm(item) {
+      return isTrialMenu(item.menu) && isLadiesDate(item.date);
+    }
+    function cartNeedsLadiesConfirm() {
+      return cart.some(needsLadiesConfirm);
+    }
+    function updateLadiesNote(dates) {
+      var today = new Date(); today.setHours(0, 0, 0, 0);
+      var show = (dates || []).some(function(d) { return d > today && isLadiesDate(d); });
+      document.getElementById('ladiesNote').style.display = show ? '' : 'none';
+    }
+
     // ===== NAVIGATION =====
     // 体験系メニューかどうか（メニュー定義の trial で判定・名前の変更に追従する）
     function isTrialMenu(name) {
@@ -1001,6 +1044,7 @@
       if (step === 3) {
         // 体験トレーニングがカートにある時だけ目的・年代の入力欄を表示
         document.getElementById('taikenExtra').style.display = cartHasTaiken() ? '' : 'none';
+        document.getElementById('ladiesConfirmBox').style.display = cartNeedsLadiesConfirm() ? '' : 'none';
       }
       if (step === 4) {
         var name = document.getElementById('inputName').value.trim();
@@ -1010,6 +1054,9 @@
         if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { showError('メールアドレスの形式が正しくありません。'); return; }
         if (cartHasTaiken() && (!document.getElementById('inputPurpose').value || !document.getElementById('inputAgeGroup').value)) {
           showError('トレーニングの目的と年代を選択してください。'); return;
+        }
+        if (cartNeedsLadiesConfirm() && !document.getElementById('inputLadiesConfirm').checked) {
+          showError('火曜日は女性の方専用日です。体験トレーニングをお申し込みの方は「女性の方です」にチェックを入れてください。'); return;
         }
         // Build confirmation
         var html = '';
@@ -1113,7 +1160,7 @@
       var allSlots={},missing=false;
       dates.forEach(function(d){
         var ds=fmtDate(d);
-        if(d<=today||d.getDay()===state.closedDay){allSlots[ds]={closed:true};}
+        if(d<=today||isClosedDate(d)){allSlots[ds]={closed:true};}
         else if(usable&&st.dates[ds]){allSlots[ds]=st.dates[ds];}
         else{missing=true;}
       });
@@ -1160,13 +1207,14 @@
       var today=new Date();today.setHours(0,0,0,0);
       var need=dates.some(function(d){
         var ds=fmtDate(d);
-        if(d<=today||d.getDay()===state.closedDay)return false;
+        if(d<=today||isClosedDate(d))return false;
         return !(st&&Date.now()-st.ts<SLOTS_PAINT_TTL&&st.dates[ds]);
       });
       if(need)fetchSlotsInto(state.selectedMenu,weekPage+1);
     }
 
     function renderSlotTable(dates, allSlots) {
+      updateLadiesNote(dates);
       var today=new Date();today.setHours(0,0,0,0);var todayStr=fmtDate(today);
       var timeSet={};
       dates.forEach(function(d){var ds=fmtDate(d);var info=allSlots[ds];if(info&&info.slots)info.slots.forEach(function(s){timeSet[s.time]=true;});});
@@ -1181,9 +1229,10 @@
       dates.forEach(function(d){
         var ds=fmtDate(d),dow=d.getDay(),cls=[];
         if(dow===0)cls.push('sun');if(dow===6)cls.push('sat');
-        if(dow===state.closedDay)cls.push('closed-col');if(d<=today)cls.push('past-col');
+        if(isClosedDate(d))cls.push('closed-col');if(d<=today)cls.push('past-col');
         if(ds===todayStr)cls.push('today-col');
-        html+='<th class="'+cls.join(' ')+'">'+(d.getMonth()+1)+'/'+d.getDate()+'<br><span style="font-size:10px;">('+dayNames[dow]+')</span></th>';
+        var ladies=d>today&&isLadiesDate(d);if(ladies)cls.push('ladies-col');
+        html+='<th class="'+cls.join(' ')+'">'+(d.getMonth()+1)+'/'+d.getDate()+'<br><span style="font-size:10px;">('+dayNames[dow]+')</span>'+(ladies?'<br><span style="font-size:9px;">女性専用</span>':'')+'</th>';
       });
       html+='</tr></thead><tbody>';
 
@@ -1192,9 +1241,9 @@
         html+='<tr><td'+(isFull?' style="font-size:13px;font-weight:700;"':'')+'>' +time+'</td>';
         dates.forEach(function(d){
           var ds=fmtDate(d),dow=d.getDay(),cls=[];
-          if(ds===todayStr)cls.push('today-col');if(dow===state.closedDay)cls.push('closed-col');if(d<=today)cls.push('past-col');
+          if(ds===todayStr)cls.push('today-col');if(isClosedDate(d))cls.push('closed-col');if(d<=today)cls.push('past-col');
           var tdCls=cls.length?' class="'+cls.join(' ')+'"':'';
-          if(dow===state.closedDay||d<=today){html+='<td'+tdCls+'></td>';return;}
+          if(isClosedDate(d)||d<=today){html+='<td'+tdCls+'></td>';return;}
           var info=allSlots[ds];
           if(!info||info.closed){html+='<td'+tdCls+'></td>';return;}
           var slot=null;
@@ -1266,7 +1315,8 @@
           action: 'createReservation',
           customer_name: name, customer_email: email, customer_phone: phone,
           notes: notes,
-          menu: item.menu, date: item.date, start_time: item.time
+          menu: item.menu, date: item.date, start_time: item.time,
+          ladies_confirmed: needsLadiesConfirm(item) && document.getElementById('inputLadiesConfirm').checked
         }, function(err, data, timedOut) {
           if (err || !data || data.error) {
             if (timedOut) {

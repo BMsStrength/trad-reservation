@@ -515,7 +515,7 @@
           <div class="card-title">顧客一覧</div>
           <div class="table-wrap">
             <table>
-              <thead><tr><th>名前</th><th>メール</th><th>電話</th><th>来店回数</th><th>最終来店</th><th>メモ</th><th></th></tr></thead>
+              <thead><tr><th>名前</th><th>メール</th><th>電話</th><th title="火曜レディース（女性専用日）を予約できるか">火曜</th><th>来店回数</th><th>最終来店</th><th>メモ</th><th></th></tr></thead>
               <tbody id="customerTableBody"></tbody>
             </table>
           </div>
@@ -2105,7 +2105,7 @@
         if(data.error) return;
         var tbody = document.getElementById('customerTableBody');
         var rows = data.customers||[];
-        if(rows.length===0){tbody.innerHTML='<tr><td colspan="7" style="text-align:center;color:var(--gray-500);">顧客がいません</td></tr>';return;}
+        if(rows.length===0){tbody.innerHTML='<tr><td colspan="8" style="text-align:center;color:var(--gray-500);">顧客がいません</td></tr>';return;}
         _custById = {};
         var html='';
         rows.forEach(function(c){
@@ -2115,6 +2115,7 @@
           html += '<tr>' +
             '<td><span style="cursor:pointer;color:var(--brand-blue);text-decoration:underline;" onclick="showCustomerHistory(\'' + jsName + '\')" title="予約履歴を表示">' + safeName + '</span></td>' +
             '<td>' + escapeHtml(c.email||'-') + '</td><td>' + escapeHtml(c.phone||'-') + '</td>' +
+            '<td>' + tuesdaySelectHtml(c) + '</td>' +
             '<td style="text-align:center;font-weight:700;">' + (c.visit_count || 0) + '回</td>' +
             '<td>' + (c.last_visit || '-') + '</td>' +
             '<td><input class="form-input" style="padding:4px 6px;font-size:11px;min-width:80px;" value="' + (c.notes||'').replace(/"/g,'&quot;') + '" ' +
@@ -2122,6 +2123,49 @@
             '<td><button class="btn btn-outline btn-sm" onclick="openCustomerEdit(\'' + c.id + '\')">編集</button></td></tr>';
         });
         tbody.innerHTML=html;
+      });
+    }
+
+    // 火曜レディース（女性専用日）を予約できるか。空欄＝火曜は不可（体験だけは確認チェックで受ける）
+    // 同じメールアドレスの行はサーバー側でまとめてそろえる
+    var TUESDAY_OPTIONS = ['', '火曜も可', '火曜のみ'];
+    function tuesdaySelectHtml(c) {
+      var cur = String(c.tuesday || '').trim();
+      var html = '<select class="form-input" style="padding:4px 6px;font-size:11px;min-width:84px;" ' +
+        'onchange="saveCustomerTuesday(\'' + c.id + '\',this)" data-prev="' + escapeHtml(cur) + '">';
+      TUESDAY_OPTIONS.forEach(function(v) {
+        html += '<option value="' + v + '"' + (v === cur ? ' selected' : '') + '>' + (v || '―') + '</option>';
+      });
+      if (cur && TUESDAY_OPTIONS.indexOf(cur) === -1) {
+        html += '<option value="' + escapeHtml(cur) + '" selected>' + escapeHtml(cur) + '（要確認）</option>';
+      }
+      return html + '</select>';
+    }
+
+    function saveCustomerTuesday(customerId, sel) {
+      var value = sel.value;
+      var prev = sel.getAttribute('data-prev') || '';
+      sel.disabled = true;
+      apiPost({ action: 'adminUpdateCustomerTuesday', customer_id: customerId, tuesday: value }).then(function(data) {
+        sel.disabled = false;
+        if (data && data.unconfirmed) {
+          // 応答が来なかっただけで、保存は済んでいることがある（書き込みのタイムアウトは失敗ではない）
+          alert('サーバーの応答がありませんでした。保存できたか分からないので、顧客一覧を読み込み直します。');
+          loadCustomers();
+          return;
+        }
+        if (!data || data.error) {
+          alert(((data && data.error) || '保存できませんでした。') + '\n火曜の設定は変わっていません。');
+          sel.value = prev;
+          return;
+        }
+        sel.setAttribute('data-prev', value);
+        var c = _custById[String(customerId)];
+        if (c) c.tuesday = value;
+        if (data.updated_rows > 1) {
+          alert('同じメールアドレスの ' + data.updated_rows + ' 行をまとめて「' + (value || '―') + '」にしました。');
+          loadCustomers();
+        }
       });
     }
 
