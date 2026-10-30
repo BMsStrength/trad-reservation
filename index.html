@@ -245,6 +245,11 @@
     .ladies-confirm label { display: flex; align-items: center; gap: 8px; font-weight: 700; cursor: pointer; }
     .ladies-confirm input { width: 20px; height: 20px; }
     .ladies-confirm .ladies-confirm-note { margin-top: 6px; font-size: 12px; line-height: 1.7; color: #6D1B3B; }
+    .prepay-confirm { padding: 12px; background: #FFF8E1; border: 1px solid #FFE082; border-radius: 8px; }
+    .prepay-confirm label { display: flex; align-items: center; gap: 8px; font-weight: 700; cursor: pointer; }
+    .prepay-confirm input { width: 20px; height: 20px; flex-shrink: 0; }
+    .prepay-confirm .prepay-confirm-note { margin-top: 6px; font-size: 12px; line-height: 1.7; color: #5D4037; }
+    .prepay-confirm .prepay-confirm-note a { color: #06C755; font-weight: 700; }
     .slot-table th.past-col { background: #f5f5f5; color: var(--gray-400); }
 
     .slot-table td {
@@ -595,6 +600,13 @@
       <div id="ladiesConfirmBox" class="form-group ladies-confirm" style="display:none;">
         <label><input type="checkbox" id="inputLadiesConfirm"> 女性の方です<span class="required">必須</span></label>
         <div class="ladies-confirm-note">火曜日は女性の方専用日です。女性以外の方と分かった場合は、返金のうえご利用をお断りします。</div>
+      </div>
+
+      <!-- 事前決済のあるメニュー（体験トレーニング）がカートにあるときだけ出す（必須） -->
+      <div id="prepayConfirmBox" class="form-group prepay-confirm" style="display:none;">
+        <label><input type="checkbox" id="inputPrepayConfirm"> <span>事前決済（<span id="prepayConfirmAmount"></span>円・税込）に同意します</span><span class="required">必須</span></label>
+        <div class="prepay-confirm-note">ご予約後にお送りするメールのリンクから、クレジットカード等でお支払いください。<br>
+          ※ 銀行振込や店舗での直接のお支払いをご希望の方は、<a href="https://lin.ee/MV85bIb" target="_blank" rel="noopener">公式LINE</a>からご連絡ください。</div>
       </div>
 
       <div class="form-group">
@@ -1045,6 +1057,10 @@
         // 体験トレーニングがカートにある時だけ目的・年代の入力欄を表示
         document.getElementById('taikenExtra').style.display = cartHasTaiken() ? '' : 'none';
         document.getElementById('ladiesConfirmBox').style.display = cartNeedsLadiesConfirm() ? '' : 'none';
+        // 事前決済のあるメニューがあるときだけ同意欄を出す（金額もここで入れる）
+        var prepay = cartPrepayTotal();
+        document.getElementById('prepayConfirmBox').style.display = prepay > 0 ? '' : 'none';
+        document.getElementById('prepayConfirmAmount').textContent = formatYen(prepay);
       }
       if (step === 4) {
         var name = document.getElementById('inputName').value.trim();
@@ -1057,6 +1073,9 @@
         }
         if (cartNeedsLadiesConfirm() && !document.getElementById('inputLadiesConfirm').checked) {
           showError('火曜日は女性の方専用日です。体験トレーニングをお申し込みの方は「女性の方です」にチェックを入れてください。'); return;
+        }
+        if (cartPrepayTotal() > 0 && !document.getElementById('inputPrepayConfirm').checked) {
+          showError('体験トレーニングは事前決済です。「事前決済に同意します」にチェックを入れてください。銀行振込・店舗でのお支払いをご希望の方は公式LINEからご連絡ください。'); return;
         }
         // Build confirmation
         var html = '';
@@ -1075,7 +1094,7 @@
             '<div class="confirm-row"><div class="confirm-label">お支払い</div><div class="confirm-value"><strong>' +
             formatYen(prepayTotal) + '円（税込）</strong></div></div>' +
             '<div class="confirm-row"><div class="confirm-label">お支払い方法</div><div class="confirm-value">' +
-            'ご予約後にお送りするメールのリンクからお支払いください。<br>前日までのお支払いが難しい場合は、当日ジムでも承ります。</div></div></div>';
+            'ご予約後にお送りするメールのリンクからお支払いください。<br>※ 銀行振込や店舗での直接のお支払いをご希望の方は、<a href="https://lin.ee/MV85bIb" target="_blank" rel="noopener">公式LINE</a>からご連絡ください。</div></div></div>';
         }
         document.getElementById('confirmList').innerHTML = html;
         document.getElementById('confirmName').textContent = name;
@@ -1267,6 +1286,10 @@
     // ===== SUBMIT =====
     function submitReservation() {
       if (cart.length === 0) return;
+      // 確認画面を経ずに呼ばれても、同意なしでは送らない
+      if (cartPrepayTotal() > 0 && !document.getElementById('inputPrepayConfirm').checked) {
+        goToStep(3); showError('「事前決済に同意します」にチェックを入れてください。'); return;
+      }
       showLoading('予約を確定しています（' + cart.length + '件）...');
       document.getElementById('btnSubmit').disabled = true;
 
