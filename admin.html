@@ -2127,8 +2127,9 @@
     }
 
     // 火曜レディース（女性専用日）を予約できるか。空欄＝火曜は不可（体験だけは確認チェックで受ける）
+    // 火曜のペアは「火曜も可（ペア）」の方だけ（相方も女性と分かっているペアの代表の方に付ける）
     // 同じメールアドレスの行はサーバー側でまとめてそろえる
-    var TUESDAY_OPTIONS = ['', '火曜も可', '火曜のみ'];
+    var TUESDAY_OPTIONS = ['', '火曜も可', '火曜も可（ペア）', '火曜のみ'];
     function tuesdaySelectHtml(c) {
       var cur = String(c.tuesday || '').trim();
       var html = '<select class="form-input" style="padding:4px 6px;font-size:11px;min-width:84px;" ' +

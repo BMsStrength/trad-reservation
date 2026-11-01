@@ -880,7 +880,7 @@
       menus: [
         { name: 'パーソナルトレーニング', duration: 60 },
         { name: 'ペアトレーニング', duration: 60 },
-        { name: 'メンテナンス', duration: 30 },
+        { name: 'メンテナンス', duration: 30, no_tuesday_ladies: true },
         { name: '体験トレーニング', duration: 90, trial: true, price: 2750 }
       ],
       closed_day: 2, buffer_min: 10, daily_max_reservations: 10, bookable_until: null
@@ -1000,9 +1000,16 @@
       var dt = (typeof d === 'string') ? new Date(d + 'T00:00:00') : d;
       return dt.getDay() === 2 && fmtDate(dt) >= state.tuesdayOpenFrom;
     }
-    // 定休日か（火曜レディースの日は開ける）
+    // 定休日か（火曜レディースの日は開ける。ただし火曜に入れないメニュー＝メンテナンスでは閉じたまま）
     function isClosedDate(d) {
-      return d.getDay() === state.closedDay && !isLadiesDate(d);
+      if (isLadiesDate(d)) return menuNoTuesday(state.selectedMenu);
+      return d.getDay() === state.closedDay;
+    }
+    function menuNoTuesday(name) {
+      for (var i = 0; i < state.menus.length; i++) {
+        if (state.menus[i].name === name) return !!state.menus[i].no_tuesday_ladies;
+      }
+      return false;
     }
     // 火曜レディースの日の体験トレーニングか（「女性の方です」の確認が要る）
     function needsLadiesConfirm(item) {
@@ -1013,7 +1020,7 @@
     }
     function updateLadiesNote(dates) {
       var today = new Date(); today.setHours(0, 0, 0, 0);
-      var show = (dates || []).some(function(d) { return d > today && isLadiesDate(d); });
+      var show = (dates || []).some(function(d) { return d > today && isLadiesDate(d) && !isClosedDate(d); });
       document.getElementById('ladiesNote').style.display = show ? '' : 'none';
     }
 
@@ -1250,7 +1257,7 @@
         if(dow===0)cls.push('sun');if(dow===6)cls.push('sat');
         if(isClosedDate(d))cls.push('closed-col');if(d<=today)cls.push('past-col');
         if(ds===todayStr)cls.push('today-col');
-        var ladies=d>today&&isLadiesDate(d);if(ladies)cls.push('ladies-col');
+        var ladies=d>today&&isLadiesDate(d)&&!isClosedDate(d);if(ladies)cls.push('ladies-col');
         html+='<th class="'+cls.join(' ')+'">'+(d.getMonth()+1)+'/'+d.getDate()+'<br><span style="font-size:10px;">('+dayNames[dow]+')</span>'+(ladies?'<br><span style="font-size:9px;">女性専用</span>':'')+'</th>';
       });
       html+='</tr></thead><tbody>';
